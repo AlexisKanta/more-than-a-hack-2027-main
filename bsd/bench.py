@@ -110,9 +110,10 @@ def prepare(seeds=SEEDS, train_seeds=TRAIN_SEEDS, handover=False, pool_meta=Fals
     return held, pool
 
 
-def fold_train(pool, game):
-    """The training entries of held-out ``game``'s fold: every pool entry of the other games."""
-    train_seeds = sorted({s for _, s in pool})
+def fold_train(pool, game, seeds=None):
+    """The training entries of held-out ``game``'s fold: every pool entry of the other games
+    (only those degraded with ``seeds``, in that order, if given)."""
+    train_seeds = sorted({s for _, s in pool}) if seeds is None else list(seeds)
     return [pool[(o, s)] for o in GAMES if o != game for s in train_seeds]
 
 
@@ -204,14 +205,15 @@ def _print_table(df):
         print(df.to_string(index=False))
 
 
-def learned_emitter(train):
+def learned_emitter(train, seed=0, hgb=None, stride=None):
     """``bsd.model`` emitter fitted on ``[(X, labels, names)]``, with ball visibility weighted to
-    BAR-ATH's in-period visible rate so that a missing ball is no dead-ball cue."""
+    BAR-ATH's in-period visible rate so that a missing ball is no dead-ball cue. ``seed``, ``hgb``
+    and ``stride`` go to ``train_emitter`` (experiments only; the defaults are the shipped model)."""
     from bsd.model import train_emitter
 
     visible_rate = 1.0 - float(gap_profile()["missing_rate"])
-    return train_emitter([t[0] for t in train], [t[1] for t in train], train[0][2],
-                         visible_rate=visible_rate)
+    return train_emitter([t[0] for t in train], [t[1] for t in train], train[0][2], seed=seed,
+                         visible_rate=visible_rate, hgb=hgb, stride=stride)
 
 
 def learned_detector(train, names, k_s=0.5, through_dead_s=None):

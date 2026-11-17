@@ -36,8 +36,23 @@ HGB_PARAMS = dict(
 SWAP = np.array([A, H, D])  # column / label permutation for mirroring
 
 
+class _LogScores:
+    """``logp`` / ``emit`` on top of ``proba``, ``prior`` and ``names`` (shared by both emitters)."""
+
+    def logp(self, X):
+        """(F, 3) log(p / prior), rounded to 6 decimals."""
+        p = np.clip(self.proba(X), MIN_PROBA, 1.0)
+        return np.round(np.log(p) - np.log(self.prior), 6)
+
+    def emit(self, X, names):
+        """``bench`` emitter signature; refuses features in a different column order."""
+        if list(names) != list(self.names):
+            raise ValueError("feature names differ from the ones the emitter was trained on")
+        return self.logp(X)
+
+
 @dataclass(frozen=True)
-class Emitter:
+class Emitter(_LogScores):
     model: HistGradientBoostingClassifier
     names: tuple
     prior: np.ndarray  # (3,) training frequencies of H, A, D
@@ -54,16 +69,34 @@ class Emitter:
             pm = self.model.predict_proba(mirror(X, list(self.names)))
         return 0.5 * (p + pm[:, SWAP])
 
-    def logp(self, X):
-        """(F, 3) log(p / prior), rounded to 6 decimals."""
-        p = np.clip(self.proba(X), MIN_PROBA, 1.0)
-        return np.round(np.log(p) - np.log(self.prior), 6)
 
-    def emit(self, X, names):
-        """``bench`` emitter signature; refuses features in a different column order."""
-        if list(names) != list(self.names):
-            raise ValueError("feature names differ from the ones the emitter was trained on")
-        return self.logp(X)
+@dataclass(frozen=True)
+class EnsembleEmitter(_LogScores):
+    """Mean of the members' (mirror-averaged) probabilities, then ``log(p / prior)`` as in
+    ``Emitter.logp`` with the members' common prior. Members must share feature names and prior."""
+    emitters: tuple
+
+    def __post_init__(self):
+        ems = tuple(self.emitters)
+        if not ems:
+            raise ValueError("an ensemble needs at least one emitter")
+        if any(list(e.names) != list(ems[0].names) for e in ems):
+            raise ValueError("ensemble members were trained on different feature names")
+        if any(not np.array_equal(e.prior, ems[0].prior) for e in ems):
+            raise ValueError("ensemble members have different priors")
+        object.__setattr__(self, "emitters", ems)
+
+    @property
+    def names(self):
+        return self.emitters[0].names
+
+    @property
+    def prior(self):
+        return self.emitters[0].prior
+
+    def proba(self, X):
+        """(F, 3) mean of the members' team-symmetric probabilities."""
+        return sum(e.proba(X) for e in self.emitters) / len(self.emitters)
 
 
 def visibility_weights(visible, y, visible_rate):
@@ -84,19 +117,22 @@ def visibility_weights(visible, y, visible_rate):
     return w
 
 
-def train_emitter(Xs, ys, names, seed=0, visible_rate=None):
+def train_emitter(Xs, ys, names, seed=0, visible_rate=None, hgb=None, stride=None):
     """Fit on every ``STRIDE``-th frame of each (X, y) pair plus its mirror; X-label frames dropped.
 
     ``visible_rate`` (e.g. BAR-ATH's in-period ball-visible fraction) turns on
-    ``visibility_weights`` computed from the ``ball_visible`` column.
+    ``visibility_weights`` computed from the ``ball_visible`` column. ``hgb`` (a dict merged over
+    ``HGB_PARAMS``) and ``stride`` (instead of ``STRIDE``) are overrides for experiments; the
+    defaults (None) train exactly the default model.
     """
     names = list(names)
+    stride = STRIDE if stride is None else int(stride)
     if visible_rate is not None and "ball_visible" not in names:
         raise ValueError("visible_rate needs a ball_visible feature column")
     feats, labels = [], []
     for Xg, y in zip(Xs, ys):
-        Xg = np.asarray(Xg, dtype=np.float32)[::STRIDE]
-        y = np.asarray(y)[::STRIDE]
+        Xg = np.asarray(Xg, dtype=np.float32)[::stride]
+        y = np.asarray(y)[::stride]
         keep = y != X
         Xk, yk = Xg[keep], y[keep].astype(np.int64)
         feats += [Xk, mirror(Xk, names)]
@@ -109,7 +145,7 @@ def train_emitter(Xs, ys, names, seed=0, visible_rate=None):
     weights = None
     if visible_rate is not None:
         weights = visibility_weights(Xt[:, names.index("ball_visible")] > 0, yt, visible_rate)
-    model = HistGradientBoostingClassifier(random_state=seed, **HGB_PARAMS)
+    model = HistGradientBoostingClassifier(random_state=seed, **{**HGB_PARAMS, **(hgb or {})})
     with threadpool_limits(limits=1):
         model.fit(Xt, yt, sample_weight=weights)
     return Emitter(model, tuple(names), counts / counts.sum())

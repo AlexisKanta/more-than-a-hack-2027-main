@@ -171,6 +171,96 @@ inside the original grid (alpha <= 8, floor {1, 5}), (c) reaches 0.5954 (+0.051 
 incumbent; 0.5971 needs the extended floor 0.5), and the margin is far above this bias and the ~0.04 noise band. The hand-over features alone, (a), already give +0.020 with
 the same 9-point search as the incumbent.
 
+## Stage 4 (2026-11-17): cheap training tweaks -- FAILED the gate (incumbent stays)
+
+`python -m bsd.experiments stage4` (record: `bsd/experiments_stage4.json`; per-case CSVs
+`cache/stage4_<variant>.csv`, full grids `cache/stage4_<variant>_grid.csv`, log
+`cache/stage4_log.txt`). 29 min 35 s wall time on 6 worker
+processes: 1012 s training every fold of the incumbent and (a)-(d) in parallel, ~1 min of
+decoding per variant, then 456 s for (e)'s training and 256-point decode. A first, identical run
+(22 min 24 s, `cache/stage4_run1_log.txt`) differed only in the run-time estimate, see below.
+
+Protocol: the incumbent is the committed Stage 1 model (hand-over emitter features, detector
+k_s 0.5, decoder costs re-tuned). It runs on the same 6 cases and folds as Stage 1: held-out
+game 1-3 x seed 0, 1, and each fold trained on the other two games, mirrored and
+visibility-weighted. Every variant is re-tuned on the Stage 1 grid with the detector on (alpha
+axis included), with the same extend-once rule, so 192 points each. The variants change only
+the training:
+
+- (a) `a_ensemble`: `model.EnsembleEmitter` of 3 H/A/D emitters. Member m has random_state m
+  and training degrade seeds 100-102, 103-105 or 106-108. It averages the members'
+  mirror-averaged probabilities, then takes log(p / prior). The detector is the incumbent's.
+- (b) `b_hgb`: emitter `hgb` override `max_iter` 300, `learning_rate` 0.05. The detector is the
+  incumbent's.
+- (c) `c_stride1`: emitter trained on every frame (`stride` 1 instead of 3). The detector is the
+  incumbent's.
+- (d) `d_seeds`: training degrade seeds 100-105 instead of 100-102, for both the emitter and the
+  detector.
+- (e) `e_combined`: the best two of (a)-(d), i.e. (d) + (a). It has 3 members, each trained on 6
+  seeds (100-105, 106-111, 112-117), and the detector on 100-105.
+
+Held-out seeds stay 0 and 1, which never overlap the training seeds.
+
+`bsd.run` time estimate ("est. run"): today's run (254 s) plus today's final-model training
+time (emitter 176 s, detector 60 s), each scaled by the variant's bench cost ratio (per-fold
+training CPU seconds, variant / incumbent). Ratios are used because the bench's 6 parallel
+workers run each job about 1.2x slower than a lone process: the incumbent's bench fold costs
+142 + 54 s on 2 games, versus 176 + 60 s alone on 3 games. A first run of the driver added bench
+seconds x 1.5 (fold to final data size) directly. That overestimated every variant: it gave (a)
+684 s, (d) 570 s and (e) 1489 s a priori, so (e) was skipped. The estimate was corrected and the
+stage re-run. The (a)-(d) scores were identical in both runs (deterministic training). In the
+re-run, (e)'s a-priori estimate was 1111 s, so it ran. With run 1's timings the same formula
+gives 1268 s. The skip decision for (e) is therefore within timing noise of the 1200 s limit.
+The estimates are rough (one machine, one timing of today's training).
+
+| variant | spellF1 | macroF1 | n poss | mean poss s | tuned: switch_ha, D pair, alpha, floor | train CPU per fold (emitter + detector) | est. run |
+|---|---|---|---|---|---|---|---|
+| incumbent (Stage 1 c_both) | 0.5976 | 0.8480 | 259.0 | 14.55 | 10, (40, 80), 16, 0.5 | 158 + 51 s | 254 s |
+| (a) a_ensemble | 0.6010 | **0.8557** | 253.0 | 14.65 | 10, (20, 40), 16, 1 | 476 + 51 s | 609 s |
+| (b) b_hgb | 0.5956 | 0.8471 | 259.3 | 14.50 | 10, (20, 40), 16, 1 | 306 + 51 s | 419 s |
+| (c) c_stride1 | 0.5961 | 0.8483 | 255.5 | 14.68 | 20, (20, 40), 16, 0.5 | 453 + 51 s | 583 s |
+| **(d) d_seeds** | **0.6057** | 0.8532 | 270.2 | 13.83 | 5, (20, 40), 16, 1 | 291 + 99 s | 460 s |
+| (e) e_combined (a + d) | 0.6029 | 0.8520 | 263.5 | 14.22 | 5, (40, 80), 8, 1 | 873 + 99 s | 1110 s |
+
+The incumbent re-bench reproduces the committed record exactly (0.5976 / 0.8480 at 10, (40, 80),
+16, 0.5). (a)-(d) are separate tweaks and all four ran, so the +0.005 early-stop rule did not
+apply to them. (e) scored 0.6029, which is 0.0028 below the best of (a)-(d), (d) at 0.6057. It
+added less than +0.005, so it is recorded as an early stop (`stopped_early_after`). (e)'s
+search extended the D axis to (80, 160) and floor to 0.5 (256 points); its best alpha is 8
+(flat to 16).
+
+Per case, spellF1 (macroF1):
+
+| game | seed | incumbent | a_ensemble | b_hgb | c_stride1 | d_seeds | e_combined |
+|---|---|---|---|---|---|---|---|
+| 1 | 0 | 0.5626 (0.8425) | 0.5711 (0.8476) | 0.5612 (0.8389) | 0.5858 (0.8487) | 0.5712 (0.8417) | 0.5707 (0.8407) |
+| 2 | 0 | 0.6489 (0.8477) | 0.6397 (0.8521) | 0.6426 (0.8438) | 0.6254 (0.8394) | 0.6777 (0.8538) | 0.6524 (0.8506) |
+| 3 | 0 | 0.5589 (0.8542) | 0.5687 (0.8602) | 0.5717 (0.8559) | 0.5580 (0.8540) | 0.5657 (0.8591) | 0.5610 (0.8582) |
+| 1 | 1 | 0.6151 (0.8458) | 0.6182 (0.8651) | 0.5978 (0.8493) | 0.6083 (0.8514) | 0.6101 (0.8593) | 0.6203 (0.8611) |
+| 2 | 1 | 0.6311 (0.8435) | 0.6389 (0.8485) | 0.6304 (0.8408) | 0.6255 (0.8387) | 0.6441 (0.8461) | 0.6330 (0.8450) |
+| 3 | 1 | 0.5691 (0.8544) | 0.5693 (0.8608) | 0.5703 (0.8537) | 0.5737 (0.8573) | 0.5656 (0.8595) | 0.5798 (0.8565) |
+
+**Gate (best variant d_seeds vs incumbent, same 6 cases): FAILED.** Mean spellF1 +0.0081
+(needs >= 0.010). It is better on 4 of 6 cases (needs >= 4; worse on game 1 and game 3 at seed
+1). Mean macroF1 +0.0052 (a drop of at most 0.010 is allowed). Only the spellF1 margin fails.
+`winner` is null in the record, and the Stage 1 model stays in `bsd.run` and
+`bsd/decode_params.json`. Nothing was changed there.
+
+Observations:
+- More training degrade seeds (d) gives the largest spellF1 gain, and the ensemble (a) the
+  largest macroF1 gain (+0.0077). Both are below the 0.010 spellF1 margin, and inside the ~0.04
+  noise band and the selection bias of a 192-point in-sample decoder search. Both differ from
+  the incumbent only in their training, and both re-tuned to the smaller D pair (20, 40).
+- Combining them (e) did not add up. It is better on all 6 cases, but by only +0.0053 on
+  average, and it costs a ~18.5 min `bsd.run` against ~7.7 min for (d) alone.
+- Longer boosting (b) and stride 1 (c) do not help (-0.002 and -0.0015). Neighbouring frames
+  are near-duplicates, as `STRIDE` assumes, and 150 rounds at 0.1 are not under-fitted.
+- In (a)-(d) the best alpha is the extended edge 16 (the curve is flat from 8). The best
+  switch_ha 5 of (d) and (e) is also an extended edge.
+- Caveats: the decoder costs are tuned in sample on the 6 reported cases. The best variant is selected
+  across 5 variants, so its margin is biased upward. That makes the failed gate more, not
+  less, robust.
+
 ## Before R13 (record)
 
 Same protocol, except that `bsd.degrade.fill_ball` linearly interpolated the sample ball across

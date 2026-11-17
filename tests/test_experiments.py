@@ -87,3 +87,41 @@ def test_tune_extends_edges_once():
     assert len(calls) == len(set(tuple(sorted(c.items())) for c in calls))
     # extended grid: 4 switch_ha x 4 D pairs x (1 + 5 alphas x 3 floors)
     assert len(calls) == 4 * 4 * 16
+
+
+def _rec(spell, macro):
+    return {"_means": (spell, macro), "mean": {"spell_f1": round(spell, 4), "macro_f1": round(macro, 4)}}
+
+
+def test_best_of_uses_unrounded_means_and_ties():
+    v = {"a": _rec(0.60004, 0.80), "b": _rec(0.60001, 0.90), "c": _rec(0.60004, 0.80)}
+    assert ex._best_of(v) == "a"  # rounded means would tie a and b at 0.6000 and pick b on macroF1
+    assert ex._ordered(v) == ["a", "c", "b"]
+
+
+def test_ensemble_member_keys_shift_training_seeds():
+    cfg = {"features": True, "detector": True, "k_s": 0.5, "through_dead_s": None,
+           **ex.STAGE4_TWEAKS["a_ensemble"]}
+    key = ex.Evidence.emit_key(cfg)
+    members = ex.Evidence.members(key)
+    assert [m[4] for m in members] == [(100, 101, 102), (103, 104, 105), (106, 107, 108)]
+    assert [m[5] for m in members] == [0, 1, 2]
+    # the incumbent's emitter is member 0 of the ensemble (trained once, shared)
+    inc = {k: cfg[k] for k in ("features", "detector", "k_s", "through_dead_s")}
+    assert ex.Evidence.members(ex.Evidence.emit_key(inc)) == members[:1]
+    assert ex.Evidence.emit_key({**inc, "stride": ex.STRIDE, "hgb": {}}) == ex.Evidence.emit_key(inc)
+    d = {**inc, **ex.STAGE4_TWEAKS["d_seeds"]}
+    assert ex.Evidence.det_key(d)[3] == tuple(range(100, 106))
+    assert ex.Evidence.det_key({**inc, **ex.STAGE4_TWEAKS["b_hgb"]}) == ex.Evidence.det_key(inc)
+
+
+def test_combine_tweaks_and_runtime_estimates():
+    both = ex.combine_tweaks(["a_ensemble", "d_seeds"])
+    assert both == {"ensemble_k": 3, "train_seeds": list(range(100, 106))}
+    inc = {"emit": 100.0, "det": 50.0}
+    assert ex.est_run_seconds(inc, inc) == ex.RUN_SECONDS
+    assert ex.est_run_seconds({"emit": 300.0, "det": 50.0}, inc) == pytest.approx(ex.RUN_SECONDS + 2 * ex.FINAL_EMIT_S)
+    assert ex.est_run_seconds({"emit": 100.0, "det": 100.0}, inc) == pytest.approx(ex.RUN_SECONDS + ex.FINAL_DET_S)
+    assert ex.est_run_seconds({"emit": 100.0, "det": 0.0}, {"emit": 100.0, "det": 0.0}) == ex.RUN_SECONDS
+    costs = {"a_ensemble": {"emit": 300.0, "det": 50.0}, "d_seeds": {"emit": 200.0, "det": 100.0}}
+    assert ex._prior_cost(["a_ensemble", "d_seeds"], costs, inc) == {"emit": 600.0, "det": 100.0}

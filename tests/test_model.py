@@ -139,3 +139,44 @@ def test_visible_rate_removes_visibility_as_dead_cue():
     assert _d_shift_from_visibility(weighted, Xt) < 0.25 * shift_plain
     with pytest.raises(ValueError):
         train_emitter([g[0] for g in [_game(1)]], [_game(1)[1]], NAMES, visible_rate=0.6)
+
+
+def test_train_emitter_defaults_unchanged():
+    games = [_game(1), _game(2)]
+    Xs, ys = [g[0] for g in games], [g[1] for g in games]
+    Xt, _ = _game(9)
+    plain = train_emitter(Xs, ys, NAMES, seed=0)
+    explicit = train_emitter(Xs, ys, NAMES, seed=0, hgb=None, stride=None)
+    np.testing.assert_array_equal(plain.logp(Xt), explicit.logp(Xt))
+    # Overrides equal to the defaults change nothing; real overrides change the model.
+    same = train_emitter(Xs, ys, NAMES, seed=0, hgb={"learning_rate": model_mod.HGB_PARAMS["learning_rate"]},
+                         stride=model_mod.STRIDE)
+    np.testing.assert_array_equal(plain.logp(Xt), same.logp(Xt))
+    for kw in ({"hgb": {"max_iter": 10}}, {"stride": 1}):
+        assert not np.array_equal(plain.logp(Xt), train_emitter(Xs, ys, NAMES, seed=0, **kw).logp(Xt))
+    assert train_emitter(Xs, ys, NAMES, seed=0, hgb={"max_iter": 10}).model.max_iter == 10
+    assert model_mod.HGB_PARAMS["max_iter"] == 30  # the override did not leak into the defaults
+
+
+def test_ensemble_single_member_equals_emitter():
+    em = _train()
+    Xt, _ = _game(9)
+    ens = model_mod.EnsembleEmitter([em])
+    np.testing.assert_array_equal(ens.logp(Xt), em.logp(Xt))
+    np.testing.assert_array_equal(ens.emit(Xt, NAMES), em.emit(Xt, NAMES))
+    with pytest.raises(ValueError):
+        ens.emit(Xt, NAMES[::-1])
+
+
+def test_ensemble_averages_probabilities_before_log():
+    a, b = _train(seed=0), _train(seed=1)
+    Xt, _ = _game(9)
+    ens = model_mod.EnsembleEmitter((a, b))
+    p = np.clip(0.5 * (a.proba(Xt) + b.proba(Xt)), model_mod.MIN_PROBA, 1.0)
+    np.testing.assert_allclose(ens.logp(Xt), np.log(p) - np.log(a.prior), atol=1e-6)
+    assert np.array_equal(ens.logp(Xt), np.round(ens.logp(Xt), 6))
+    with pytest.raises(ValueError):
+        model_mod.EnsembleEmitter(())
+    other = train_emitter([_game(3)[0]], [_game(3)[1]], NAMES, seed=0)  # different prior
+    with pytest.raises(ValueError):
+        model_mod.EnsembleEmitter((a, other))
