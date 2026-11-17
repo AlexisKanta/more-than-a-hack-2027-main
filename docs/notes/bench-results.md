@@ -180,6 +180,9 @@ default; `--no-tagging` disables it.
 | run | possessions | mean | D share H1 / H2 | H2 first 5 min | SHA-256 |
 |---|---|---|---|---|---|
 | no tagging | 273 | 15.35 s | 35.7 % / 32.5 % | H 58.9 / A 27.7 / D 13.4 | `ae565dd42f3a591e998aace0c4e7c44ff542c78b8563870cfcf6a92564e0dd1b` |
-| tagging (kept) | 257 | 15.74 s | 38.8 % / 33.8 % | H 48.0 / A 19.5 / D 32.6 | `0c9f62001d0c5f17c832211d92c7af34a83a87af73b3172227deba0127472095` |
+| tagging, original R14 (superseded: bug) | 257 | 15.74 s | 38.8 % / 33.8 % | H 48.0 / A 19.5 / D 32.6 | `0c9f62001d0c5f17c832211d92c7af34a83a87af73b3172227deba0127472095` |
+| tagging, R14b (kept) | 256 | 16.30 s | 34.8 % / 33.8 % | H 48.0 / A 19.5 / D 32.6 | `c22cc48bd24841d9dffb61f04aa1df26fac3647d17bb8a676c9f9d5d840f9eee` |
 
 Possession count and D share are nowhere near 2x the no-tagging run, so tagging is kept.
+
+R14b correction: the original R14 picked a kick-off after a goal in half 1 (the match-start tag begins just before the period) and put +3.0 on D for ~25 minutes. R14b uses only `Kick Off (Start)` tags overlapping the period and no bonus when it starts at or before the period's first frame.

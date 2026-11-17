@@ -8,7 +8,9 @@ matched case-insensitively. Rules:
   +1.0 on the tagged team over the first 2 s (nothing if ``Team`` is ``N/A``, e.g. throw-ins).
 * GOALS: +2.0 on D from the goal's end to the next kick-off set piece (capped at 90 s).
 * Any other team-tagged phase: +0.3 on that team over its interval.
-* R14: inside each period, frames before the first "kick off" set piece get +3.0 on D.
+* R14b: per period, frames from its first frame up to the start of the first "Kick Off (Start)"
+  set piece overlapping the period get +3.0 on D (never "Kick Off (After Goal)"; no bonus if the
+  tag already starts at or before the period's first frame).
 """
 import sys
 from pathlib import Path
@@ -37,6 +39,10 @@ def _is_kickoff(ev):
     return ev["code"].lower() == "set pieces" and "kick off" in str(ev["tags"].get("Type", "")).lower()
 
 
+def _is_match_start(ev):
+    return ev["code"].lower() == "set pieces" and "kick off (start)" in str(ev["tags"].get("Type", "")).lower()
+
+
 def bonus_from_events(events, n_frames, periods, fps=25):
     """Pure function: Smart Tagging event dicts (starter loader format) -> (F, 3) bonus."""
     out = np.zeros((n_frames, 3))
@@ -61,10 +67,11 @@ def bonus_from_events(events, n_frames, periods, fps=25):
             add(e, min(nxt, cap), D, GOAL_DEAD_NATS)
         elif col is not None:
             add(s, e, col, PHASE_TEAM_NATS)
+    starts = [e for e in events if _is_match_start(e)]
     for _, first, last in periods:
-        k = next((k for k in kickoffs if first <= k <= last), None)
-        if k is not None:
-            add(first, k, D, PRE_KICKOFF_DEAD_NATS)
+        ev = next((e for e in starts if e["start_frame"] <= last and e["end_frame"] > first), None)
+        if ev is not None:
+            add(first, ev["start_frame"], D, PRE_KICKOFF_DEAD_NATS)
     return out
 
 

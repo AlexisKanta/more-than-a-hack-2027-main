@@ -53,3 +53,22 @@ def test_pre_kickoff_dead_per_period():
     b = run(evs, periods=((1, 100, 400), (2, 600, 900)))
     assert np.all(b[100:200, D] >= 3.0) and np.all(b[600:700, D] >= 3.0)
     assert b[99, D] == 0 and b[300, D] == 0 and b[500, D] == 0
+
+
+def test_r14b_start_tag_before_period_gives_no_bonus():
+    evs = [ev("SET PIECES", 90, 130, Team="Barcelona", Type="Kick Off (Start)"),
+           ev("SET PIECES", 600, 640, Team="Atletic Club", Type="Kick Off (After Goal)")]
+    b = run(evs, periods=((1, 100, 900),))
+    assert b[100:520, D].max() == 0.0
+
+
+def test_r14b_after_goal_never_triggers():
+    evs = [ev("SET PIECES", 600, 640, Team="Atletic Club", Type="Kick Off (After Goal)")]
+    b = run(evs, periods=((1, 100, 900),))
+    assert b[100:520, D].max() == 0.0
+
+
+def test_goal_cap_inside_range():
+    n = 5000
+    b = bonus_from_events([ev("GOALS", 100, 120, Team="Barcelona")], n, ((1, 0, 0),))
+    assert b[120 + 2249, D] == 2.0 and b[120 + 2250, D] == 0.0
