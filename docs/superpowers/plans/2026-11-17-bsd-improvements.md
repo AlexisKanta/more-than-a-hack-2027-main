@@ -315,7 +315,7 @@ failed)" in the ledger.
   - Defaults are unchanged and bit-identical.
 - Produces: `EnsembleEmitter(emitters)`, with the same `.emit(X, names)` and `.logp(X)` interface.
   - It averages the members' mirror-averaged probabilities, then applies
-    `log(p/prior) − ...` exactly as `Emitter.logp` does (using the members' common prior).
+    `log(p/prior)` exactly as `Emitter.logp` does (using the members' common prior).
   - It rounds to 6 decimals.
 - Produces: `bsd/experiments_stage4.json` (committed), with the same schema idea as stage 1.
   - Its winner config is `{"ensemble_k": int, "hgb": dict, "stride": int,
