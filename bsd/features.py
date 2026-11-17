@@ -6,7 +6,8 @@ swap the teams. Rows outside ``tr.periods`` are NaN, and windows never cross a p
 
 Team-relative quantities use the team's attacking direction from ``attack_sign``: ``cx``/``cy``
 are the team centroid in that team's own frame (pitch rotated so it attacks +x; 0 = own goal
-line), ``vx_fwd`` is its mean x-velocity towards the goal it attacks.
+line), ``vx_fwd`` is its mean x-velocity towards the goal it attacks, and ``ball_xfwd_<team>``
+is the ball x in that frame. ``ball_ywide`` = |ball y - W/2| is team-neutral.
 """
 import numpy as np
 
@@ -124,6 +125,9 @@ def frame_features(tr):
         bs[k:n - k] = np.where(same, step, np.nan)
     f["ball_speed"] = bs
     f["ball_dist_edge"] = np.minimum(np.minimum(bx, L - bx), np.minimum(by, W - by))
+    f["ball_xfwd_home"] = L / 2 + (bx - L / 2) * sign  # ball x in home's attacking frame
+    f["ball_xfwd_away"] = L - f["ball_xfwd_home"]
+    f["ball_ywide"] = np.abs(by - W / 2)
     d = np.hypot(P[..., 0] - B[:, None, 0], P[..., 1] - B[:, None, 1])  # (F,S), NaN if either missing
     for t, sel in teams.items():
         dt = d[:, sel]

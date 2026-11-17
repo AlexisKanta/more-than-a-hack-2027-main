@@ -46,8 +46,36 @@ def test_near_distances():
     assert (col(X, names, "n5_home") == 1).all() and (col(X, names, "n5_away") == 1).all()
 
 
-BALL_COLS = ("ball_out", "ball_speed", "ball_dist_edge", "near_home", "near_away", "n2_home",
-             "n2_away", "n5_home", "n5_away", "frames_since_ball", "ball_static")
+def test_ball_speed_and_static():
+    n = 100
+    ball = np.tile(np.array([[L / 2, W / 2]], dtype=np.float32), (n, 1))
+    ball[:50, 0] = 20.0 + 0.2 * np.arange(50)  # 0.2 m/frame at 25 fps = 5 m/s
+    tr = make_tr(n=n, periods=[(1, 0, 49), (2, 50, 99)], ball=ball)  # 2nd period: still ball
+    X, names = frame_features(tr)
+    sp, st = col(X, names, "ball_speed"), col(X, names, "ball_static")
+    np.testing.assert_allclose(sp[2:48], 5.0, atol=1e-3)
+    assert (st[2:50] == 0).all()
+    np.testing.assert_allclose(sp[52:98], 0.0, atol=1e-6)
+    assert (st[76:98] == 1).all()  # a full second of valid slow speeds
+    assert np.isnan(sp[:2]).all() and np.isnan(sp[48:52]).all()  # centred diff stays in its period
+
+
+def test_ball_position_columns():
+    tr = make_tr(n=100, periods=[(1, 0, 49), (2, 50, 99)])
+    tr.players[50:, :2, 0] = 75.0  # home attacks -x in period 2
+    tr.players[50:, 2:, 0] = 30.0
+    tr.ball[:] = (20.0, 60.0)
+    tr.ball[10] = np.nan
+    X, names = frame_features(tr)
+    xh, xa, yw = (col(X, names, c) for c in ("ball_xfwd_home", "ball_xfwd_away", "ball_ywide"))
+    assert xh[0] == 20.0 and xa[0] == L - 20.0 and xh[60] == L - 20.0 and xa[60] == 20.0
+    np.testing.assert_allclose(yw[[0, 60]], 60.0 - W / 2)
+    assert np.isnan([xh[10], xa[10], yw[10]]).all()
+
+
+BALL_COLS = ("ball_out", "ball_speed", "ball_dist_edge", "ball_xfwd_home", "ball_xfwd_away",
+             "ball_ywide", "near_home", "near_away", "n2_home", "n2_away", "n5_home", "n5_away",
+             "frames_since_ball", "ball_static")
 
 
 def test_missing_ball_nan_safe():
