@@ -54,7 +54,7 @@ file's SHA-256 differs from the value given.
 - Intermediate results are cached in `cache/` (gitignored). Deleting it forces a full rebuild and
   gives the same file.
 - Reference platform: the published SHA-256 was produced and verified (two clean runs gave the same
-  hash; the earlier v1 file was also verified from a fresh `git archive` checkout) on macOS arm64 with Python 3.14.6.
+  hash; v2 was also verified from a clean `git archive` checkout of the final commit with an empty cache) on macOS arm64 with Python 3.14.6.
   Byte-identity on other platforms is expected but was not verified.
 
 ## Optional

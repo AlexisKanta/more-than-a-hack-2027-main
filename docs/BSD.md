@@ -43,7 +43,7 @@ Options we considered:
 | Hand-written state machine over tracking and tagging | Needs dozens of thresholds that cannot legally be tuned on this match. Our hand-set version (`bsd/heuristic.py`) is kept as a baseline and loses clearly on the bench (0.2567 vs 0.5440 for v1 evidence). |
 | Our own ball/player detection from video | Hours per run and no way to measure its payoff before the deadline. |
 | Copying Smart Tagging intervals as labels | Tagging intervals are phases, not possessions, and start or end seconds away from the GT boundaries. |
-| **Hybrid HMM: learned per-frame evidence + Viterbi over {H, A, D}** | Fits spellF1's segment view, treats a missing ball as weak evidence rather than a failure, and has only 3 decoder parameters to tune. Labelled data from other games gives a legitimate training and validation set. **Chosen.** |
+| **Hybrid HMM: learned per-frame evidence + Viterbi over {H, A, D}** | Fits spellF1's segment view, treats a missing ball as weak evidence rather than a failure, and has only 5 decoder parameters to tune (three switch costs, `alpha` and `floor` of the change detector). Labelled data from other games gives a legitimate training and validation set. **Chosen.** |
 
 ### Pipeline
 
@@ -52,7 +52,7 @@ Options we considered:
    = `frame_id − 1` = video frame `i`. The decode windows are the two graded halves from
    `games.half_video_blocks("BAR-ATH")`, published game constants. Every frame outside them is
    written `X`.
-2. **Features** (`bsd/features.py`, 50 columns). Slot-agnostic team quantities, because slots are
+2. **Features** (`bsd/features.py`, 61 columns). Slot-agnostic team quantities, because slots are
    tracklets, not identities:
    - Ball: visible, out of play (0.5 m margin), signed distance to the nearest line, speed from
      positions (the ATD's speed field is unreliable), static, frames since last seen.
@@ -61,6 +61,9 @@ Options we considered:
      tracked count.
    - Pace: overall player speed and its trend.
    - Context: 1 s and 3 s rolling context of the key columns.
+   - Hand-over (v2): ball acceleration and direction change, the home-minus-away difference in
+     nearby players and a sign flip of it, indicators that a team's player is the closest within 2 m, and the 1 s rolling
+     mean of each (6 + 5 columns).
 
    Attacking direction is inferred per period from mean team positions. Slot jumps faster than
    12 m/s are treated as identity swaps.
@@ -138,6 +141,9 @@ thank Metrica Sports for publishing it.
   `bsd/` for frame-like numbers). A generic Smart Tagging rule (§5) makes the second-half
   pre-kickoff stretch mostly `D` (about 73 % of its frames); it is not a hard-coded frame, and
   nothing in the model was changed because of it. Short spurious H/A spells remain there (§9).
+- **Tried and rejected.** Public DFL/IDSSE data (Bassek et al., Scientific Data 2025, CC BY 4.0)
+  was tried as extra training data and rejected by the bench gate; it is not used in the
+  submission. The Stage 4 training tweaks (`docs/notes/bench-results.md`) were also rejected.
 
 ## 5. Possession rules
 
@@ -173,7 +179,7 @@ when the accumulated evidence pays the costs above. In practice:
 
 - a loose ball or a one-touch duel does not switch possession unless the other team's evidence
   persists;
-- a short stoppage must be clearly dead to be labelled `D` (entering and leaving costs 60 nats);
+- a short stoppage must be clearly dead to be labelled `D` (entering and leaving costs 40 + 80 = 120 nats);
 - after a restart, the label follows the evidence for the restarting team.
 
 The costs were chosen only by mean held-out spellF1 on the sample-game bench.
@@ -190,7 +196,7 @@ Codes and values are matched case-insensitively.
 | Pre-kick-off | Per period, frames before the first `Kick Off (Start)` set piece that overlaps the period get +3.0 on D. No bonus if the tag starts at or before the period's first frame; `Kick Off (After Goal)` is never used. This makes the second-half warm-up stretch mostly `D` (about 73 % of its frames) without any literal frame; short spurious H/A spells remain (§9). |
 
 These weights could not be validated, because the sample games have no Smart Tagging. With
-tagging off the run gives 273 possessions (mean 15.35 s) instead of 256. We kept it on because the
+tagging off the v2 run gives 244 possessions (mean 17.14 s) instead of 223 (mean 18.78 s). We kept it on because the
 change is modest and every rule follows directly from what a set piece, goal or kick-off means.
 
 ## 6. Determinism
@@ -206,8 +212,8 @@ Everything that could vary between runs or machines is fixed:
 - the sample data are pinned to a commit.
 
 `python -m bsd.run --check-sha <hex>` fails if the output differs. The published SHA-256 was
-produced twice with identical output (v1 was also verified from a fresh `git archive` checkout with
-an empty cache) on macOS arm64 with Python 3.14.6. Byte-identity on other platforms is expected but
+produced twice with identical output (v2 was also verified from a clean `git archive` checkout of the
+final commit with an empty cache) on macOS arm64 with Python 3.14.6. Byte-identity on other platforms is expected but
 was not verified.
 
 ## 7. Validation (sample-game bench, `bsd/bench.py`, `docs/notes/bench-results.md`)
@@ -263,7 +269,7 @@ of about ±0.04 spellF1 applies to a full match, and the band on this window is 
 
 - **Bench numbers are optimistic.** The classifiers are trained out of fold, but the decoder
   costs were picked on the same held-out cases that are reported. The detector variants searched
-  192-256 grid points against 9 for v1, so their in-sample selection bias is larger. The sample games are also
+  192-256 grid points against 9 for the incumbent re-check (v1's 0.5440 came from an 80-point grid plus extensions), so their in-sample selection bias is larger. The sample games are also
   cleaner and closer to their own labels than BAR-ATH is to its GT.
 - **Edge-of-grid parameters.** The adopted point sits on edges: `alpha` 16 and `floor` 0.5 are
   once-extended edges (the curve is flat there: 0.5971 at alpha 8), and the D pair (40, 80) is the
@@ -280,10 +286,10 @@ of about ±0.04 spellF1 applies to a full match, and the band on this window is 
   12–300). The model still keeps a small part of the cue, which may label long BAR-ATH occlusions
   as dead. With more time: more varied visible-dead training data, or a model that conditions on
   visibility explicitly.
-- **Under-segmentation.** We predict fewer, longer possessions than the event-derived labels (about
-  257 vs 349 per sample game, 14.7 s vs 10.8 s), so short duel possessions and quick hand-overs
-  are missed. Duration-aware states or a hand-over-specific cue (first touch by the new team)
-  would help.
+- **Under-segmentation.** We predict fewer, longer possessions than the event-derived labels (v2 bench:
+  259 possessions per game, mean 14.55 s, against 349 and 10.8 s in the labels), so short duel
+  possessions and quick hand-overs are still missed, though less than in v1. On BAR-ATH v2 predicts
+  fewer possessions than v1 (223 vs 256). Duration-aware states would be the next step.
 - **Smart Tagging weights are unvalidated** first-principles guesses (no tagging in the sample
   games).
 - **Pre-kickoff stretch is only mostly dead.** The pre-kickoff rule (§5) makes the second-half

@@ -7,8 +7,8 @@ written file's SHA-256 equals ``<hex>`` (the reproducibility check in REPRODUCE.
 repository root.
 
 The decoder costs of each mode, and the default mode (the one that won the sample-game bench),
-come from the committed ``bsd/decode_params.json`` written by ``python -m bsd.bench --mode
-learned``. ``--mode learned`` trains the emitter on all three degraded sample games
+come from the committed ``bsd/decode_params.json``, written by ``python -m bsd.experiments
+stage1``. ``--mode learned`` trains the emitter on all three degraded sample games
 (``bsd.bench.training_data``) before scoring BAR-ATH. If the learned entry has a ``handover`` block
 the emitter also gets the hand-over features and, when ``detector`` is true, a change detector
 trained on the same data sets a per-frame H<->A switch cost (``bsd.decode.switch_cost_from``).

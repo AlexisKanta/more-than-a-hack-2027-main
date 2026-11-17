@@ -276,8 +276,9 @@ ball missingness, since the DFL ball is present on every frame), featurised with
 
 **Label-convention caveat.** DFL labels are the data provider's per-frame BallStatus /
 BallPossession flags, not event-derived. They carry more dead time (D share 41-52 % of frames vs
-30-40 % on Metrica) and shorter possession spells (mean 5.5-9.2 s vs ~10 s on Metrica; ~500 GT
-spells per DFL game) than the Metrica labels built from events (`bsd.events`, R5-R7). The
+30-40 % on Metrica) and shorter possession spells (mean 5.5-9.2 s vs ~10 s on Metrica; the
+D-share and spell-length ranges come from the 7-match loader smoke check, the ~500 GT spells per
+game from the 3 secondary holdout games) than the Metrica labels built from events (`bsd.events`, R5-R7). The
 BAR-ATH GT is built from corrected tracking, so it may be closer to the DFL flags than to the
 Metrica labels, but that cannot be checked here; the primary (gate) bench scores against the
 Metrica convention only, so a model that learns the DFL convention is penalised there.
