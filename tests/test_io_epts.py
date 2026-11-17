@@ -57,3 +57,64 @@ def test_epts_team_from_meta(tr):
 
 def test_epts_periods_from_meta(tr):
     assert tr.periods == [(1, 0, 1), (2, 2, 3)]
+
+
+SPEC_META = META.replace(
+    "</Metadata>",
+    """<DataFormatSpecifications>
+<DataFormatSpecification startFrame="1" endFrame="2" separator=":">
+<StringRegister name="frameCount"/>
+<SplitRegister separator=";">
+<SplitRegister separator=","><PlayerChannelRef playerChannelId="c_x"/><PlayerChannelRef playerChannelId="c_y"/></SplitRegister>
+<SplitRegister separator=","><PlayerChannelRef playerChannelId="a_x"/><PlayerChannelRef playerChannelId="a_y"/></SplitRegister>
+</SplitRegister>
+<SplitRegister separator=","><BallChannelRef channelId="x"/><BallChannelRef channelId="y"/></SplitRegister>
+</DataFormatSpecification>
+<DataFormatSpecification startFrame="3" endFrame="4" separator=":">
+<StringRegister name="frameCount"/>
+<SplitRegister separator=";">
+<SplitRegister separator=","><PlayerChannelRef playerChannelId="b_x"/><PlayerChannelRef playerChannelId="b_y"/></SplitRegister>
+</SplitRegister>
+<SplitRegister separator=","><BallChannelRef channelId="x"/><BallChannelRef channelId="y"/></SplitRegister>
+</DataFormatSpecification>
+</DataFormatSpecifications></Metadata>""",
+)
+SPEC_RAW = """1:0.1,0.2;0.5,0.5:0.5,0.5
+2:0.3,0.4;NaN,NaN:0.5,0.5
+3:0.0,1.0:0.5,0.5
+4:1.0,0.0:0.5,0.5
+"""
+
+
+def _write(tmp_path, meta, raw):
+    (tmp_path / "m.xml").write_text(meta)
+    (tmp_path / "r.txt").write_text(raw)
+    return tmp_path / "r.txt", tmp_path / "m.xml"
+
+
+def test_epts_spec_remaps_groups_to_slots(tmp_path):
+    raw, meta = _write(tmp_path, SPEC_META, SPEC_RAW)
+    t = read_epts(raw, meta, (100.0, 50.0))
+    assert t.players.shape == (4, 3, 2)
+    # frame 1: group0 -> slot 2, group1 -> slot 0; slot 1 absent
+    assert t.players[0, 2] == pytest.approx([10.0, 10.0], abs=1e-3)
+    assert t.players[0, 0] == pytest.approx([50.0, 25.0], abs=1e-3)
+    assert np.isnan(t.players[0, 1]).all()
+    assert t.players[1, 2] == pytest.approx([30.0, 20.0], abs=1e-3)
+    assert np.isnan(t.players[1, 0]).all()
+    # second range: single group -> slot 1
+    assert t.players[2, 1] == pytest.approx([0.0, 50.0], abs=1e-3)
+    assert np.isnan(t.players[2, 0]).all() and np.isnan(t.players[2, 2]).all()
+    assert t.players[3, 1] == pytest.approx([100.0, 0.0], abs=1e-3)
+
+
+def test_epts_spec_mismatch_raises(tmp_path):
+    raw, meta = _write(tmp_path, SPEC_META, SPEC_RAW.replace("3:0.0,1.0:", "3:0.0,1.0;0.1,0.1:"))
+    with pytest.raises(ValueError, match="DataFormatSpecification"):
+        read_epts(raw, meta, (100.0, 50.0))
+
+
+def test_epts_frame_gap_raises(tmp_path):
+    raw, meta = _write(tmp_path, META, RAW.replace("3:", "5:"))
+    with pytest.raises(ValueError, match="frame id"):
+        read_epts(raw, meta, (105.3, 68.0))

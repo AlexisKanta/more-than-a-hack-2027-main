@@ -82,6 +82,10 @@ def read_epts(raw_path, meta_path, pitch, periods=None):
         for (s, e, _), sl in zip(specs, spec_slots):
             if s <= frame_id <= e and len(sl) == n_groups:
                 return sl
+        if specs:
+            raise ValueError(
+                "no DataFormatSpecification matches frame %d with %d groups" % (frame_id, n_groups)
+            )
         return np.arange(n_groups, dtype=np.intp)  # no spec: file order == slot order
 
     with open(raw_path, "r") as fh:
@@ -89,6 +93,8 @@ def read_epts(raw_path, meta_path, pitch, periods=None):
             parts = line.strip().split(":")
             if len(parts) < 2:
                 continue
+            if int(parts[0]) != i + 1:
+                raise ValueError("frame id %s at line %d breaks the 1-based sequence" % (parts[0], i + 1))
             groups = parts[1].split(";")
             toks = np.array(parts[1].replace(";", ",").split(","), dtype=np.float32)
             w = len(toks) // len(groups)
