@@ -66,7 +66,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
     params = tuned[args.mode]
     print("mode: %s  decode: %s" % (args.mode, params), flush=True)
-    print("tagging: off (%s)" % ("--no-tagging" if args.no_tagging else "not implemented yet"), flush=True)
+    print("tagging: %s" % ("off (--no-tagging)" if args.no_tagging else "on"), flush=True)
 
     import games
     from bsd.decode import decode_periods
@@ -87,6 +87,11 @@ def main(argv=None):
         from bsd.heuristic import heuristic_logp
 
         logp = heuristic_logp(X, names)
+    if not args.no_tagging:
+        from bsd.tagging import tag_bonus
+
+        logp = logp + tag_bonus(len(tr.ball), int(tr.fps), tr.periods)
+        assert np.isfinite(logp).all()
     codes = decode_periods(logp, params, tr.periods, len(tr.ball))
     sha = write_submission(codes, OUT_PATH)
 

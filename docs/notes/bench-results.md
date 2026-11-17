@@ -170,3 +170,16 @@ read by `bsd.run`; copy in `cache/decode_params.json`), so `python -m bsd.run` d
 `python -m bsd.run --mode learned --no-tagging` (final model: all 3 games x seeds 100-102,
 mirrored; 2 min 34 s): validator OK, 269 possessions, mean 14.28 s, D share 38.9 % / 40.2 %
 per half. SHA-256 `7632e1cf89f3d73255be76f64f3baefc0aacc9277ea880c62a9868c15b91af76`.
+
+### Smart Tagging (Task 10, label-free BAR-ATH runs, learned mode)
+
+`bsd/tagging.py` adds fixed-weight evidence (see its docstring) plus R14 (+3.0 nats on D before
+the first kick-off set piece of each period) to the log-scores before decoding. Tagging is on by
+default; `--no-tagging` disables it.
+
+| run | possessions | mean | D share H1 / H2 | H2 first 5 min | SHA-256 |
+|---|---|---|---|---|---|
+| no tagging | 273 | 15.35 s | 35.7 % / 32.5 % | H 58.9 / A 27.7 / D 13.4 | `ae565dd42f3a591e998aace0c4e7c44ff542c78b8563870cfcf6a92564e0dd1b` |
+| tagging (kept) | 257 | 15.74 s | 38.8 % / 33.8 % | H 48.0 / A 19.5 / D 32.6 | `0c9f62001d0c5f17c832211d92c7af34a83a87af73b3172227deba0127472095` |
+
+Possession count and D share are nowhere near 2x the no-tagging run, so tagging is kept.
