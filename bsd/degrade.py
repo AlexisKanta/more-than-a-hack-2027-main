@@ -1,13 +1,14 @@
 """Degrade clean sample-game tracking so it looks like BAR-ATH's automatic tracking.
 
 A model trained on the sample games is applied to BAR-ATH, so the sample tracking is made to
-share BAR-ATH's defects -- and, crucially, *not* the sample games' own artefact that the ball
-is NaN mostly when it is dead (which would teach "no ball => dead ball", false on BAR-ATH,
-where a missing ball is mostly occlusion). ``degrade`` therefore
+share BAR-ATH's defects. ``degrade``
 
-1. fills the sample ball across all its gaps (``fill_ball``), erasing its dead-ball NaN pattern;
-2. hides the ball with a new mask of alternating visible / missing runs resampled from BAR-ATH's
-   own run lengths -- built without looking at labels or at the source ball;
+1. hides the ball with a synthetic mask of alternating visible / missing runs resampled from
+   BAR-ATH's own run lengths -- built without looking at labels or at the source ball;
+2. keeps the ball missing wherever the source ball is missing (mostly dead-ball time in the
+   sample games): no ball position is ever invented, so the model never sees a fake ball. The
+   resulting "no ball => dead" correlation, false on BAR-ATH where a missing ball is mostly
+   occlusion, is removed at training time by visibility weights (``bsd.model``);
 3. drops player observations down to a per-frame count resampled from BAR-ATH;
 4. adds smooth Gaussian position jitter;
 5. reassigns identities by permuting each team's slot columns in blocks of 10-60 s
@@ -15,7 +16,6 @@ where a missing ball is mostly occlusion). ``degrade`` therefore
 
 Every random draw comes from ``np.random.default_rng(seed)``; inputs are never mutated.
 """
-import dataclasses
 from pathlib import Path
 
 import numpy as np
@@ -87,26 +87,6 @@ def gap_profile(tr=None):
     CACHE_PATH.parent.mkdir(exist_ok=True)
     np.savez(CACHE_PATH, **p)
     return p
-
-
-def fill_ball(tr):
-    """New Tracking whose ball is linearly interpolated across gaps within each period.
-
-    Leading / trailing gaps of a period hold the nearest valid position; a period without any
-    valid ball gets the pitch centre. Frames outside periods are left as they are.
-    """
-    ball = tr.ball.copy()
-    centre = np.array([tr.pitch[0] / 2, tr.pitch[1] / 2], dtype=ball.dtype)
-    for _, a, b in tr.periods:
-        seg = ball[a:b + 1]
-        ok = np.isfinite(seg).all(axis=1)
-        if not ok.any():
-            seg[:] = centre
-            continue
-        idx = np.arange(len(seg))
-        for c in range(2):
-            seg[:, c] = np.interp(idx, idx[ok], seg[ok, c])
-    return dataclasses.replace(tr, ball=ball)
 
 
 def _draw_runs(n, vis_lengths, gap_lengths, rate, rng):
@@ -239,12 +219,11 @@ def degrade(tr, profile, seed):
     rng = np.random.default_rng(seed)
     fps = int(tr.fps)
     n = len(tr.ball)
-    ball = fill_ball(tr).ball
-    missing = _ball_mask(tr, profile, rng) | ~_period_mask(tr)
+    missing = _ball_mask(tr, profile, rng) | ~_period_mask(tr) | ~np.isfinite(tr.ball).all(axis=1)
     players = tr.players.copy()
     _drop_players(players, profile["n_tracked"], fps, rng)
     players += _smooth_noise(n, players.shape[1:], fps, rng)  # NaN stays NaN
-    ball = ball + _smooth_noise(n, (2,), fps, rng)
+    ball = tr.ball + _smooth_noise(n, (2,), fps, rng)
     ball[missing] = np.nan
     players = _swap_slots(players, tr.team, fps, rng)
     return Tracking(players, tr.team.copy(), ball.astype(np.float32), list(tr.periods),

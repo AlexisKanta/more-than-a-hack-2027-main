@@ -13,9 +13,10 @@ Degraded features are not cached: degrading and featurising a sample game takes 
 emitter (``bsd.model``) on the same held-out evidence and adopts the one with the higher mean
 held-out spellF1. Each fold's learned emitter is trained once, on the two other games degraded
 with ``TRAIN_SEEDS`` (distinct from the held-out degradation seeds), and its held-out log-scores
-are cached; the whole grid is then decoded from them. The adopted mode and both tuned parameter
-sets are written to ``bsd/decode_params.json`` (committed; read by ``bsd.run``) and copied to
-``cache/decode_params.json``.
+are cached; the whole grid is then decoded from them. Training rows are weighted so that the
+ball is visible equally often under every label (``learned_emitter``). The adopted mode and
+both tuned parameter sets are written to ``bsd/decode_params.json`` (committed; read by
+``bsd.run``) and copied to ``cache/decode_params.json``.
 """
 import argparse
 import itertools
@@ -183,11 +184,14 @@ def _print_table(df):
         print(df.to_string(index=False))
 
 
-def _learned_make_emit(train):
+def learned_emitter(train):
+    """``bsd.model`` emitter fitted on ``[(X, labels, names)]``, with ball visibility weighted to
+    BAR-ATH's in-period visible rate so that a missing ball is no dead-ball cue."""
     from bsd.model import train_emitter
 
-    names = train[0][2]
-    return train_emitter([t[0] for t in train], [t[1] for t in train], names).emit
+    visible_rate = 1.0 - float(gap_profile()["missing_rate"])
+    return train_emitter([t[0] for t in train], [t[1] for t in train], train[0][2],
+                         visible_rate=visible_rate)
 
 
 def tune_all():
@@ -195,7 +199,7 @@ def tune_all():
     from bsd.heuristic import heuristic_logp
 
     held, pool = prepare()
-    makers = {"heuristic": lambda train: heuristic_logp, "learned": _learned_make_emit}
+    makers = {"heuristic": lambda train: heuristic_logp, "learned": lambda train: learned_emitter(train).emit}
     record = {}
     for mode in MODES:
         print("\n=== %s ===" % mode, flush=True)

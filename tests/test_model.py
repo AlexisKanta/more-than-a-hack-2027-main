@@ -3,7 +3,7 @@ import pytest
 
 import bsd.model as model_mod
 from bsd.features import mirror
-from bsd.model import train_emitter
+from bsd.model import train_emitter, visibility_weights
 
 H, A, D, X = 0, 1, 2, 3
 NAMES = ["near_home", "near_away", "depth_diff", "speed_all"]
@@ -83,3 +83,59 @@ def test_emit_checks_feature_names():
     np.testing.assert_array_equal(em.emit(Xt, NAMES), em.logp(Xt))
     with pytest.raises(ValueError):
         em.emit(Xt, NAMES[::-1])
+
+
+def test_visibility_weights_equalise_rate_per_label():
+    rng = np.random.default_rng(0)
+    y = rng.integers(0, 3, 20_000)
+    visible = rng.random(len(y)) < np.array([0.9, 0.8, 0.05])[y]  # D mostly without a ball
+    w = visibility_weights(visible, y, 0.6)
+    for s in (H, A, D):
+        sel = y == s
+        assert (w[sel] * visible[sel]).sum() / w[sel].sum() == pytest.approx(0.6)
+        assert w[sel].sum() == pytest.approx(sel.sum())  # label totals (and so the prior) kept
+
+
+def test_visibility_weights_degenerate_label():
+    y = np.array([H, H, A, A, D, D])
+    visible = np.array([True, False, True, False, False, False])  # D never visible
+    w = visibility_weights(visible, y, 0.7)
+    np.testing.assert_allclose(w[y == D], 1.0)
+    np.testing.assert_allclose(w[:2], [0.7 / 0.5, 0.3 / 0.5])
+
+
+def _vis_game(seed, n):
+    """Labels from speed and proximity; the ball is mostly missing on dead frames (sample-game
+    pattern), and ``ball_visible`` says nothing else."""
+    rng = np.random.default_rng(seed)
+    near_h, near_a = rng.gamma(2.0, 2.0, n), rng.gamma(2.0, 2.0, n)
+    speed = rng.uniform(0.2, 3.0, n)
+    y = np.where(near_h < near_a, H, A).astype(np.int8)
+    y[speed < 1.2] = D
+    vis = (rng.random(n) < np.where(y == D, 0.05, 0.9)).astype(np.float32)
+    speed_seen = speed + rng.normal(0, 0.8, n)  # noisy, so visibility is worth learning
+    return np.column_stack([vis, near_h, near_a, speed_seen]).astype(np.float32), y
+
+
+VIS_NAMES = ["ball_visible", "near_home", "near_away", "speed_all"]
+
+
+def _d_shift_from_visibility(em, Xt):
+    on, off = Xt.copy(), Xt.copy()
+    on[:, 0], off[:, 0] = 1.0, 0.0
+    return np.abs(em.logp(on)[:, D] - em.logp(off)[:, D]).mean()
+
+
+def test_visible_rate_removes_visibility_as_dead_cue():
+    """Unweighted, the model learns "no ball => dead"; weighted, most of that cue is gone. (Not
+    all of it: the few visible dead rows carry large weights and the trees fit them coarsely.)"""
+    games = [_vis_game(1, 20_000), _vis_game(2, 20_000)]
+    Xs, ys = [g[0] for g in games], [g[1] for g in games]
+    plain = train_emitter(Xs, ys, VIS_NAMES, seed=0)
+    weighted = train_emitter(Xs, ys, VIS_NAMES, seed=0, visible_rate=0.6)
+    Xt, _ = _vis_game(9, 6000)
+    shift_plain = _d_shift_from_visibility(plain, Xt)
+    assert shift_plain > 2.0
+    assert _d_shift_from_visibility(weighted, Xt) < 0.25 * shift_plain
+    with pytest.raises(ValueError):
+        train_emitter([g[0] for g in [_game(1)]], [_game(1)[1]], NAMES, visible_rate=0.6)

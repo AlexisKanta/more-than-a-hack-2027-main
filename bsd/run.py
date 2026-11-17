@@ -77,12 +77,11 @@ def main(argv=None):
     tr = bar_ath_tracking()
     X, names = frame_features(tr)
     if args.mode == "learned":
-        from bsd.bench import training_data
-        from bsd.model import train_emitter
+        from bsd.bench import learned_emitter, training_data
 
         print("training emitter on the degraded sample games ...", flush=True)
         train = training_data()
-        logp = train_emitter([t[0] for t in train], [t[1] for t in train], train[0][2]).emit(X, names)
+        logp = learned_emitter(train).emit(X, names)
         del train
     else:
         from bsd.heuristic import heuristic_logp

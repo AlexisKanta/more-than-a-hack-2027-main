@@ -4,7 +4,10 @@
 ``bsd.degrade``). Every frame is used twice, as is and mirrored (home/away columns swapped, H/A
 labels swapped), so the model has no built-in home preference; ``Emitter.proba`` also averages
 the prediction of a frame with the swapped prediction of its mirror, which makes the evidence
-exactly team-symmetric. ``Emitter.logp`` is ``log(p / prior)`` with the training class
+exactly team-symmetric. With ``visible_rate`` given, rows are weighted so that the ball is
+visible on that fraction of each label's rows (``visibility_weights``): in the degraded sample
+games the ball is missing on almost every dead frame, which on BAR-ATH (missing ball = mostly
+occlusion) would be a false "dead" cue. ``Emitter.logp`` is ``log(p / prior)`` with the training class
 frequencies as prior, i.e. a scaled likelihood -- the per-frame evidence the Viterbi decoder
 adds up -- rounded to 6 decimals.
 
@@ -63,9 +66,33 @@ class Emitter:
         return self.logp(X)
 
 
-def train_emitter(Xs, ys, names, seed=0):
-    """Fit on every ``STRIDE``-th frame of each (X, y) pair plus its mirror; X-label frames dropped."""
+def visibility_weights(visible, y, visible_rate):
+    """Per-row weights making P(ball visible | label) = ``visible_rate`` for every label.
+
+    For label s with visible fraction q_s: visible rows get ``visible_rate / q_s``, missing rows
+    ``(1 - visible_rate) / (1 - q_s)``; each label's weights still sum to its row count, so the
+    class prior is unchanged. A label whose rows are all visible or all missing keeps weight 1.
+    """
+    visible = np.asarray(visible, dtype=bool)
+    y = np.asarray(y)
+    w = np.ones(len(y), dtype=np.float64)
+    for s in np.unique(y):
+        sel = y == s
+        q = visible[sel].mean()
+        if 0.0 < q < 1.0:
+            w[sel] = np.where(visible[sel], visible_rate / q, (1.0 - visible_rate) / (1.0 - q))
+    return w
+
+
+def train_emitter(Xs, ys, names, seed=0, visible_rate=None):
+    """Fit on every ``STRIDE``-th frame of each (X, y) pair plus its mirror; X-label frames dropped.
+
+    ``visible_rate`` (e.g. BAR-ATH's in-period ball-visible fraction) turns on
+    ``visibility_weights`` computed from the ``ball_visible`` column.
+    """
     names = list(names)
+    if visible_rate is not None and "ball_visible" not in names:
+        raise ValueError("visible_rate needs a ball_visible feature column")
     feats, labels = [], []
     for Xg, y in zip(Xs, ys):
         Xg = np.asarray(Xg, dtype=np.float32)[::STRIDE]
@@ -79,7 +106,10 @@ def train_emitter(Xs, ys, names, seed=0):
     counts = np.bincount(yt, minlength=3)
     if (counts == 0).any():
         raise ValueError("training labels must contain H, A and D frames")
+    weights = None
+    if visible_rate is not None:
+        weights = visibility_weights(Xt[:, names.index("ball_visible")] > 0, yt, visible_rate)
     model = HistGradientBoostingClassifier(random_state=seed, **HGB_PARAMS)
     with threadpool_limits(limits=1):
-        model.fit(Xt, yt)
+        model.fit(Xt, yt, sample_weight=weights)
     return Emitter(model, tuple(names), counts / counts.sum())

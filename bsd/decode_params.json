@@ -1,24 +1,24 @@
 {
   "adopted": "learned",
   "heuristic": {
-    "switch_ha": 10.0,
-    "alive_to_dead": 10.0,
+    "switch_ha": 5.0,
+    "alive_to_dead": 5.0,
     "dead_to_alive": 10.0,
-    "bench_spell_f1": 0.3049,
-    "bench_macro_f1": 0.6011,
-    "bench_n_poss": 255.1667,
-    "bench_mean_poss_s": 19.6598,
+    "bench_spell_f1": 0.2567,
+    "bench_macro_f1": 0.5006,
+    "bench_n_poss": 261.0,
+    "bench_mean_poss_s": 20.644,
     "bench_gt_n_poss": 349.3333,
     "bench_gt_mean_poss_s": 10.7516
   },
   "learned": {
     "switch_ha": 20.0,
-    "alive_to_dead": 80.0,
-    "dead_to_alive": 10.0,
-    "bench_spell_f1": 0.5578,
-    "bench_macro_f1": 0.8531,
-    "bench_n_poss": 250.1667,
-    "bench_mean_poss_s": 14.3533,
+    "alive_to_dead": 20.0,
+    "dead_to_alive": 40.0,
+    "bench_spell_f1": 0.544,
+    "bench_macro_f1": 0.8372,
+    "bench_n_poss": 256.8333,
+    "bench_mean_poss_s": 14.6852,
     "bench_gt_n_poss": 349.3333,
     "bench_gt_mean_poss_s": 10.7516
   }

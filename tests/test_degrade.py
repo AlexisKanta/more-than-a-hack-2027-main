@@ -1,6 +1,6 @@
 import numpy as np
 
-from bsd.degrade import degrade, fill_ball, gap_profile
+from bsd.degrade import degrade, gap_profile
 from bsd.tracking import Tracking
 
 L, W = 105.0, 68.0
@@ -62,28 +62,6 @@ def test_gap_profile_runs_and_counts():
     assert (p["n_tracked"][30:40] == 17).all() and (p["n_tracked"][:30] == 22).all()
 
 
-# --- fill_ball ---------------------------------------------------------------------------
-
-
-def test_fill_ball_no_nan_inside_period():
-    n = 120
-    ball = np.full((n, 2), np.nan, dtype=np.float32)
-    ball[5] = (10.0, 20.0)
-    ball[15] = (20.0, 30.0)
-    ball[30] = (40.0, 10.0)
-    # period 1 = 0..39: leading NaN 0..4, gaps, trailing NaN 31..39; period 2 = 40..79 all NaN
-    tr = make_tr(n, periods=[(1, 0, 39), (2, 40, 79)], ball=ball)
-    before = tr.ball.copy()
-    out = fill_ball(tr)
-    assert np.isfinite(out.ball[:80]).all()
-    np.testing.assert_allclose(out.ball[:5], [[10.0, 20.0]] * 5)  # leading edge held
-    np.testing.assert_allclose(out.ball[10], (15.0, 25.0), atol=1e-5)  # linear interpolation
-    np.testing.assert_allclose(out.ball[31:40], [[40.0, 10.0]] * 9)  # trailing edge held
-    np.testing.assert_allclose(out.ball[40:80], [[L / 2, W / 2]] * 40)  # empty period -> centre
-    assert np.isnan(out.ball[80:]).all()  # outside periods untouched
-    np.testing.assert_array_equal(tr.ball, before)  # input not mutated
-
-
 # --- degrade -----------------------------------------------------------------------------
 
 
@@ -103,34 +81,56 @@ def test_missing_rate_short_sequence():
         assert abs(ball_missing_rate(out) - profile["missing_rate"]) <= 0.03
 
 
-def test_mask_independent_of_label():
-    """The degraded ball mask must not carry the dead-ball signal.
+def _dead_block_labels(n):
+    labels = np.zeros(n, dtype=np.int8)
+    period = 1500
+    for start in range(0, n, period):
+        labels[start:start + 600] = 0
+        labels[start + 600:start + 1200] = 1
+        labels[start + 1200:start + period] = 2  # 300-frame D block every 60 s
+    return labels
 
-    The source ball is NaN on exactly the D frames (the sample-game pattern in its purest
-    form), so any leak of the source NaN pattern or of the labels would give P(miss|D) ~ 1.
+
+def test_mask_independent_of_label():
+    """The synthetic ball mask must not carry the dead-ball signal.
+
+    The source ball here is fully tracked, so the output's missing frames are exactly the
+    synthetic mask; it is drawn without labels or source ball, so P(miss|D) ~ P(miss|alive).
     Stable, not flaky: the seeds are fixed, so the outcome is deterministic, and the pooled
     sample (20 seeds x 100k frames, ~2.5k independent mask cycles) puts the sampling error of the
     difference around 0.01, far inside the 0.05 bound.
     """
     n = 100_000
-    labels = np.zeros(n, dtype=np.int8)
-    period = 1500
-    for start in range(0, n, period):
-        labels[start + 1200:start + period] = 2  # 300-frame D block every 60 s
-        labels[start:start + 600] = 0
-        labels[start + 600:start + 1200] = 1
-    ball = np.tile(np.array([[L / 2, W / 2]], dtype=np.float32), (n, 1))
-    ball[labels == 2] = np.nan
+    labels = _dead_block_labels(n)
     profile = make_profile()
     miss_d, miss_alive = [], []
     for seed in range(20):
-        out = degrade(make_tr(n, ball=ball), profile, seed)
+        out = degrade(make_tr(n), profile, seed)
         miss = np.isnan(out.ball[:, 0])
         miss_d.append(miss[labels == 2])
         miss_alive.append(miss[labels != 2])
     p_d = np.concatenate(miss_d).mean()
     p_alive = np.concatenate(miss_alive).mean()
     assert abs(p_d - p_alive) < 0.05, (p_d, p_alive)
+
+
+def test_source_gaps_stay_missing():
+    """No invented ball positions: a frame without a source ball has no ball after degrading,
+    and the synthetic mask (same seed) is the same whatever the source ball's gaps are."""
+    n = 30_000
+    labels = _dead_block_labels(n)
+    full = make_tr(n)
+    ball = full.ball.copy()
+    ball[labels == 2] = np.nan  # the sample-game pattern: no ball while dead
+    gappy = make_tr(n, ball=ball)
+    profile = make_profile()
+    for seed in range(3):
+        miss_full = np.isnan(degrade(full, profile, seed).ball).any(axis=1)
+        out = degrade(gappy, profile, seed)
+        miss = np.isnan(out.ball).any(axis=1)
+        assert miss[labels == 2].all()
+        np.testing.assert_array_equal(miss, miss_full | (labels == 2))
+        np.testing.assert_array_equal(np.isnan(out.ball[:, 0]), np.isnan(out.ball[:, 1]))
 
 
 def test_degrade_deterministic():
