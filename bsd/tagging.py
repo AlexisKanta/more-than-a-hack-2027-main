@@ -10,7 +10,9 @@ matched case-insensitively. Rules:
 * Any other team-tagged phase: +0.3 on that team over its interval.
 * R14b: per period, frames from its first frame up to the start of the first "Kick Off (Start)"
   set piece overlapping the period get +3.0 on D (never "Kick Off (After Goal)"; no bonus if the
-  tag already starts at or before the period's first frame).
+  tag already starts at or before the period's first frame). This makes the pre-kickoff stretch
+  mostly D, not entirely: the +3.0-nat prior is weaker than the learned model's strongest
+  evidence, and the "Kick Off (Start)" tag begins a few seconds before the actual kickoff.
 """
 import sys
 from pathlib import Path

@@ -124,8 +124,9 @@ thank Metrica Sports for publishing it.
   sees every game degraded with 3 seeds (100, 101, 102), every 3rd frame, plus mirrored copies.
 - **Provided game**: no hand labels, no event data, no corrected tracking, and no rules or
   constants tied to specific frames of BAR-ATH (a unit test, `tests/test_no_literals.py`, scans
-  `bsd/` for frame-like numbers). The second-half pre-kickoff stretch comes out `D` from a
-  generic Smart Tagging rule (§5), not from a hard-coded frame.
+  `bsd/` for frame-like numbers). A generic Smart Tagging rule (§5) makes the second-half
+  pre-kickoff stretch mostly `D` (about 73 % of its frames); it is not a hard-coded frame, and
+  nothing in the model was changed because of it. Short spurious H/A spells remain there (§9).
 
 ## 5. Possession rules
 
@@ -175,7 +176,7 @@ Codes and values are matched case-insensitively.
 | Set piece | +2.0 nats on D over the 3 s before its start (the ball is dead before a restart), and +1.0 on the tagged team over its first 2 s (nothing when `Team` is `N/A`, e.g. throw-ins) |
 | Goal | +2.0 on D from the goal's end to the next kick-off set piece (capped at 90 s) |
 | Other team-tagged phase | +0.3 on that team over its interval |
-| Pre-kick-off | Per period, frames before the first `Kick Off (Start)` set piece that overlaps the period get +3.0 on D. No bonus if the tag starts at or before the period's first frame; `Kick Off (After Goal)` is never used. This turns the second-half warm-up stretch into `D` without any literal frame. |
+| Pre-kick-off | Per period, frames before the first `Kick Off (Start)` set piece that overlaps the period get +3.0 on D. No bonus if the tag starts at or before the period's first frame; `Kick Off (After Goal)` is never used. This makes the second-half warm-up stretch mostly `D` (about 73 % of its frames) without any literal frame; short spurious H/A spells remain (§9). |
 
 These weights could not be validated, because the sample games have no Smart Tagging. With
 tagging off the run gives 273 possessions (mean 15.35 s) instead of 256. We kept it on because the
@@ -189,11 +190,14 @@ Everything that could vary between runs or machines is fixed:
 - the classifier is single-threaded (`threadpoolctl`), with fixed iterations and no early
   stopping;
 - probabilities are rounded to 1e-6 before decoding;
-- Python and all packages are pinned (`requirements-bsd.txt`);
+- Python and all packages, direct and indirect, are pinned (`requirements-bsd.txt`; the base
+  `requirements.txt` it includes lists unpinned numpy and pandas, which the exact pins here fix);
 - the sample data are pinned to a commit.
 
-`python -m bsd.run --check-sha <hex>` fails if the output differs. Two runs from an empty
-`cache/` gave the same SHA-256 (the one above).
+`python -m bsd.run --check-sha <hex>` fails if the output differs. The published SHA-256 was
+produced and verified (three clean runs, including one from a fresh `git archive` checkout with an
+empty cache) on macOS arm64 with Python 3.14.6. Byte-identity on other platforms is expected but
+was not verified.
 
 ## 7. Validation (sample-game bench, `bsd/bench.py`, `docs/notes/bench-results.md`)
 
@@ -240,11 +244,22 @@ of about ±0.04 spellF1 applies to a full match, and the band on this window is 
   as dead. With more time: more varied visible-dead training data, or a model that conditions on
   visibility explicitly.
 - **Under-segmentation.** We predict fewer, longer possessions than the event-derived labels (about
-  250 vs 350 per sample game, 14.7 s vs 10.8 s), so short duel possessions and quick hand-overs
+  257 vs 349 per sample game, 14.7 s vs 10.8 s), so short duel possessions and quick hand-overs
   are missed. Duration-aware states or a hand-over-specific cue (first touch by the new team)
   would help.
 - **Smart Tagging weights are unvalidated** first-principles guesses (no tagging in the sample
   games).
+- **Pre-kickoff stretch is only mostly dead.** The pre-kickoff rule (§5) makes the second-half
+  pre-kickoff stretch mostly `D` (about 73 % of its frames), but short spurious H/A spells remain:
+  the +3.0-nat prior is weaker than the learned model's strongest evidence, and the
+  `Kick Off (Start)` tag begins a few seconds before the actual kickoff. Nothing in the model was
+  changed because of this.
+- **Phase-team bonus may cancel.** Smart Tagging phase codes come in pairs (each in-possession code
+  has a matching "defending..." code tagged to the other team), so the +0.3 phase-team bonus
+  largely cancels and may point the wrong way where the paired intervals do not coincide. Left
+  unchanged and not tested on the bench.
+- **Set-piece tags start early.** Set-piece tags start a few seconds before the restart, so the
+  +1.0 team bonus over the tag's first 2 s can fall inside the dead spell.
 - **Home team by name.** `bsd/tagging.py` maps tagging teams to H/A with the constant
   `HOME_NAME = "barcelona"`.
 - **Decoder parametrisation.** `alive_to_dead` and `dead_to_alive` are nearly redundant: only

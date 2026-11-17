@@ -1,3 +1,5 @@
+> Note: superseded in places by implementation rulings (e.g. `fill_ball` was removed); `docs/BSD.md` describes the code as built.
+
 # BSD Possession Pipeline Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
