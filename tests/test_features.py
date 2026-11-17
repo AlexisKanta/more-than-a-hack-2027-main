@@ -182,3 +182,59 @@ def test_outside_periods_nan_and_dtype():
     assert X.dtype == np.float32 and len(set(names)) == len(names)
     assert np.isnan(X[:10]).all() and np.isnan(X[90:]).all()
     assert np.isfinite(col(X, names, "speed_all")[11:90]).all()
+
+
+HANDOVER_COLS = [
+    "ball_acc", "ball_turn", "near_diff", "near_flip", "closest_home", "closest_away",
+    "ball_acc_m1s", "ball_turn_m1s", "near_flip_m1s", "closest_home_m1s", "closest_away_m1s",
+]
+
+
+def test_handover_flag_off_identical():
+    tr = make_tr(n=120)
+    X0, n0 = frame_features(tr)
+    X1, n1 = frame_features(tr, handover=False)
+    assert n0 == n1 and np.array_equal(X0, X1, equal_nan=True)
+
+
+def test_handover_columns_appended():
+    tr = make_tr(n=120)
+    _, base = frame_features(tr)
+    X, names = frame_features(tr, handover=True)
+    assert names[:len(base)] == base and names[len(base):] == HANDOVER_COLS
+    assert X.shape[1] == len(names)
+
+
+def test_handover_features_nan_when_ball_missing():
+    n = 200
+    tr = make_tr(n=n)
+    tr.ball[60:160] = np.nan
+    X, names = frame_features(tr, handover=True)
+    for c in ("ball_acc", "ball_turn", "near_flip", "closest_home", "closest_away"):
+        assert np.isnan(col(X, names, c)[80:140]).all(), c
+    assert not np.isinf(X).any()
+
+
+def test_handover_features_mirror_partners():
+    n = 120
+    tr = make_tr(n=n)
+    tr.players[:, 0] = (L / 2 + 1.0, W / 2)  # home holds the ball
+    X, names = frame_features(tr, handover=True)
+    M = mirror(X, names)
+    for a, b in (("closest_home", "closest_away"), ("closest_home_m1s", "closest_away_m1s")):
+        assert np.array_equal(col(M, names, a), col(X, names, b), equal_nan=True)
+        assert np.array_equal(col(M, names, b), col(X, names, a), equal_nan=True)
+    assert np.array_equal(col(M, names, "near_diff"), -col(X, names, "near_diff"), equal_nan=True)
+    assert (col(X, names, "closest_home")[10:] == 1).all()
+
+
+def test_ball_turn_reversal():
+    n = 100
+    x = np.concatenate([20 + 0.2 * np.arange(50), 20 + 0.2 * 49 - 0.2 * np.arange(1, 51)])
+    ball = np.stack([x, np.full(n, 30.0)], axis=1)
+    tr = make_tr(n=n, ball=ball)
+    X, names = frame_features(tr, handover=True)
+    bt = col(X, names, "ball_turn")
+    assert abs(bt[49] - np.pi) < 1e-3
+    np.testing.assert_allclose(bt[10:40], 0.0, atol=1e-3)
+    np.testing.assert_allclose(bt[60:90], 0.0, atol=1e-3)

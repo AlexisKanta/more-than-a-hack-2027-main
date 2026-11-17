@@ -19,6 +19,10 @@ STATIC_SPEED = 1.0  # m/s
 STATIC_S = 1  # ball must stay under STATIC_SPEED for this long
 TREND_S = 2  # speed_all_trend compares the last TREND_S seconds with the TREND_S before
 FSB_CAP_S = 30  # frames_since_ball cap, seconds
+TURN_SPAN = 5  # frames each side for the ball-direction change (hand-over features)
+FLIP_SPAN = 6  # frames each side for the nearest-team flip
+CLOSE_R = 2.0  # m, closest player counts as holding the ball within this radius
+HANDOVER_CTX = ("ball_acc", "ball_turn", "near_flip", "closest_home", "closest_away")
 CONTEXT_S = {"m1s": 1, "m3s": 3}  # centred rolling-mean half-widths, seconds
 CONTEXT_COLS = (
     "near_home", "near_away", "n5_home", "n5_away", "ball_out", "ball_speed",
@@ -99,8 +103,53 @@ def _slot_velocity(tr, pid):
     return V
 
 
-def frame_features(tr):
-    """Return ``(X, names)``: X is (F, K) float32, NaN where a feature is undefined."""
+def _handover_features(f, bx, by, vis, pid, segs, n, fps):
+    """Hand-over columns, added to ``f`` in place (see ``frame_features(handover=True)``)."""
+    k, S = BALL_SPEED_SPAN, TURN_SPAN
+    # ball acceleration: centred difference of the centred ball velocity
+    vx, vy = np.full(n, np.nan), np.full(n, np.nan)
+    if n > 2 * k:
+        same = (pid[2 * k:] == pid[:-2 * k]) & (pid[2 * k:] >= 0)
+        vx[k:n - k] = np.where(same, (bx[2 * k:] - bx[:-2 * k]) * fps / (2 * k), np.nan)
+        vy[k:n - k] = np.where(same, (by[2 * k:] - by[:-2 * k]) * fps / (2 * k), np.nan)
+    acc = np.full(n, np.nan)
+    if n > 2 * k:
+        acc[k:n - k] = np.hypot(vx[2 * k:] - vx[:-2 * k], vy[2 * k:] - vy[:-2 * k]) * fps / (2 * k)
+    f["ball_acc"] = acc
+    # ball turn: angle between the previous and next S-frame displacement
+    turn = np.full(n, np.nan)
+    if n > 2 * S:
+        c = slice(S, n - S)
+        px, py = bx[c] - bx[:n - 2 * S], by[c] - by[:n - 2 * S]
+        qx, qy = bx[2 * S:] - bx[c], by[2 * S:] - by[c]
+        same = (pid[2 * S:] == pid[:-2 * S]) & (pid[2 * S:] >= 0)
+        ok = same & (np.hypot(px, py) > 0) & (np.hypot(qx, qy) > 0)
+        ang = np.abs(np.arctan2(px * qy - py * qx, px * qx + py * qy))
+        turn[c] = np.where(ok, ang, np.nan)
+    f["ball_turn"] = turn
+    nd = f["near_home"] - f["near_away"]
+    f["near_diff"] = nd
+    flip = np.full(n, np.nan)
+    F = FLIP_SPAN
+    if n > 2 * F:
+        before, after = nd[:n - 2 * F], nd[2 * F:]
+        same = (pid[2 * F:] == pid[:-2 * F]) & (pid[2 * F:] >= 0)
+        ok = same & np.isfinite(before) & np.isfinite(after)
+        flip[F:n - F] = np.where(ok, (np.sign(before) != np.sign(after)).astype(np.float64), np.nan)
+    f["near_flip"] = flip
+    nh = np.where(np.isfinite(f["near_home"]), f["near_home"], np.inf)
+    na = np.where(np.isfinite(f["near_away"]), f["near_away"], np.inf)
+    f["closest_home"] = np.where(vis, ((nh < na) & (nh <= CLOSE_R)).astype(np.float64), np.nan)
+    f["closest_away"] = np.where(vis, ((na < nh) & (na <= CLOSE_R)).astype(np.float64), np.nan)
+    for name in HANDOVER_CTX:
+        f[name + "_m1s"] = _window_mean(f[name], segs, -fps, fps)
+
+
+def frame_features(tr, handover=False):
+    """Return ``(X, names)``: X is (F, K) float32, NaN where a feature is undefined.
+
+    ``handover=True`` appends the hand-over columns after the default ones.
+    """
     n, fps = len(tr.ball), int(tr.fps)
     L, W = float(tr.pitch[0]), float(tr.pitch[1])
     segs = _segments(tr)
@@ -172,6 +221,9 @@ def frame_features(tr):
     for name in CONTEXT_COLS:
         for suffix, sec in CONTEXT_S.items():
             f["%s_%s" % (name, suffix)] = _window_mean(f[name], segs, -sec * fps, sec * fps)
+
+    if handover:
+        _handover_features(f, bx, by, vis, pid, segs, n, fps)
 
     names = list(f)
     X = np.empty((n, len(names)), dtype=np.float32)
