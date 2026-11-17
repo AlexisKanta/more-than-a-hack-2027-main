@@ -263,16 +263,18 @@ of about ±0.04 spellF1 applies to a full match, and the band on this window is 
 
 - **Bench numbers are optimistic.** The classifiers are trained out of fold, but the decoder
   costs were picked on the same held-out cases that are reported. The detector variants searched
-  192-256 grid points against 9 for v1, so their in-sample selection bias is larger.
+  192-256 grid points against 9 for v1, so their in-sample selection bias is larger. The sample games are also
+  cleaner and closer to their own labels than BAR-ATH is to its GT.
 - **Edge-of-grid parameters.** The adopted point sits on edges: `alpha` 16 and `floor` 0.5 are
   once-extended edges (the curve is flat there: 0.5971 at alpha 8), and the D pair (40, 80) is the
   top of the unextended D axis. Inside the original grid (alpha <= 8, floor {1, 5}) the same
   variant reaches 0.5954 (+0.051 over v1), so the gain does not rest on the extensions.
 - **Not re-checked on the public window.** §8 describes the v1 file. The v2 file was not scored
   against the public GT; no parameter was chosen with it.
-- **`bsd.bench --mode learned` rewrites `bsd/decode_params.json`** from the v1 protocol and drops
-  the `handover` block. Rerunning it is not part of the reproduction. The sample games are also
-  cleaner and closer to their own labels than BAR-ATH is to its GT.
+- **`bsd.bench --mode learned` is the v1 protocol.** While the committed
+  `bsd/decode_params.json` has a `handover` block it does not overwrite that file; it writes
+  `cache/decode_params_v1protocol.json`. The Stage 1 parameters come from
+  `python -m bsd.experiments stage1`. Rerunning either is not part of the reproduction.
 - **Residual "ball missing ⇒ dead" cue.** In the degraded sample games the ball is visible on
   only 0.2–4.9 % of dead frames, so visibility weights for visible-dead rows are large (about
   12–300). The model still keeps a small part of the cue, which may label long BAR-ATH occlusions

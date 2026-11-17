@@ -62,9 +62,14 @@ file's SHA-256 differs from the value given.
 ```bash
 python -m pytest -q                       # unit tests
 python -m bsd.bench --mode learned        # leave-one-game-out bench + decoder tuning (~9 min);
-                                          # rewrites bsd/decode_params.json
+                                          # (v1 protocol, see warning below)
 python evaluation/validate_submission.py evaluation/results/BSD.csv
 ```
 
-`python -m bsd.bench --mode learned` regenerates `bsd/decode_params.json`; the submission depends
-on that file, so rerunning the bench is not part of the reproduction.
+Warning: `python -m bsd.bench --mode learned` is the v1 tuning protocol (constant costs, no
+hand-over detector). Because `bsd/decode_params.json` carries a `handover` block, it does not
+overwrite that file; it writes `cache/decode_params_v1protocol.json`. The stage-1 parameters are
+produced by `python -m bsd.experiments stage1` (record: `bsd/experiments_stage1.json`). The
+submission depends on `bsd/decode_params.json`, so rerunning either is not part of the
+reproduction. Do not copy the v1-protocol file over it: that reverts `bsd.run` to v1 behaviour and
+changes the SHA-256.

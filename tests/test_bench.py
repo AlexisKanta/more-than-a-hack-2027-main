@@ -201,3 +201,33 @@ def test_training_data_meta_shapes(monkeypatch):
     full = bench_mod.training_data(games=(1,), seeds=(7,), handover=True, meta=True)
     assert plain == [("X", "y", "names")] and full == [("X", "y", "names", "periods", 5, 25)]
     assert seen == [(1, 7, False, False), (1, 7, True, True)]
+
+
+def test_save_record_keeps_committed_params_with_handover_block(tmp_path, monkeypatch):
+    import json
+
+    committed = tmp_path / "decode_params.json"
+    cache = tmp_path / "cache" / "decode_params.json"
+    rec = {"adopted": "learned", "learned": {"handover": {"features": True}}}
+    committed.write_text(json.dumps(rec))
+    monkeypatch.setattr(bench_mod, "PARAMS_PATH", committed)
+    monkeypatch.setattr(bench_mod, "CACHE_PARAMS_PATH", cache)
+    new = {"adopted": "learned", "learned": {"switch_ha": 1.0}}
+    target = bench_mod.save_record(new)
+    assert json.loads(committed.read_text()) == rec  # untouched
+    assert target.name == "decode_params_v1protocol.json" and json.loads(target.read_text()) == new
+    assert not cache.exists()
+
+
+def test_save_record_overwrites_without_handover_block(tmp_path, monkeypatch):
+    import json
+
+    committed = tmp_path / "decode_params.json"
+    cache = tmp_path / "cache" / "decode_params.json"
+    committed.write_text(json.dumps({"adopted": "learned", "learned": {}}))
+    monkeypatch.setattr(bench_mod, "PARAMS_PATH", committed)
+    monkeypatch.setattr(bench_mod, "CACHE_PARAMS_PATH", cache)
+    monkeypatch.setattr(bench_mod, "ROOT", tmp_path)
+    new = {"adopted": "heuristic", "learned": {}}
+    bench_mod.save_record(new)
+    assert json.loads(committed.read_text()) == new and json.loads(cache.read_text()) == new

@@ -247,14 +247,28 @@ def tune_all():
         del cases
     adopted = max(MODES, key=lambda m: record[m]["bench_spell_f1"])  # tie -> heuristic (listed first)
     out = {"adopted": adopted, **record}
-    text = json.dumps(out, indent=2) + "\n"
-    PARAMS_PATH.write_text(text)
-    CACHE_PARAMS_PATH.parent.mkdir(exist_ok=True)
-    CACHE_PARAMS_PATH.write_text(text)
     print("\nadopted: %s" % adopted)
-    print(text, end="")
-    print("saved %s and %s" % (PARAMS_PATH.relative_to(ROOT), CACHE_PARAMS_PATH.relative_to(ROOT)))
+    print(json.dumps(out, indent=2))
+    save_record(out)
     return out
+
+
+def save_record(out):
+    """Write the tuning record. If the committed learned entry has a ``handover`` block, leave
+    ``bsd/decode_params.json`` alone (this v1-protocol bench would drop the block) and write
+    ``cache/decode_params_v1protocol.json`` instead."""
+    text = json.dumps(out, indent=2) + "\n"
+    CACHE_PARAMS_PATH.parent.mkdir(exist_ok=True)
+    if PARAMS_PATH.exists() and load_handover_config(PARAMS_PATH) is not None:
+        target = CACHE_PARAMS_PATH.with_name("decode_params_v1protocol.json")
+        target.write_text(text)
+        print("committed %s has a hand-over block; not overwritten (Stage 1 params come from "
+              "`python -m bsd.experiments stage1`); wrote %s" % (PARAMS_PATH.name, target.name))
+        return target
+    PARAMS_PATH.write_text(text)
+    CACHE_PARAMS_PATH.write_text(text)
+    print("saved %s and %s" % (PARAMS_PATH.relative_to(ROOT), CACHE_PARAMS_PATH.relative_to(ROOT)))
+    return PARAMS_PATH
 
 
 def load_handover_config(path=PARAMS_PATH, mode="learned"):
