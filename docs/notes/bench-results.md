@@ -453,3 +453,7 @@ default; `--no-tagging` disables it.
 Possession count and D share are nowhere near 2x the no-tagging run, so tagging is kept.
 
 R14b correction: the original R14 picked a kick-off after a goal in half 1 (the match-start tag begins just before the period) and put +3.0 on D for ~25 minutes. R14b uses only `Kick Off (Start)` tags overlapping the period and no bonus when it starts at or before the period's first frame.
+
+## Public-window correctness check, v2 (2026-11-17)
+
+Scored once with `python evaluation/run_evaluation.py` after the v2 file was final (SHA-256 `aaf42ebbf0d41f0285877869f1fda9e4d5ee51068a98713b204ee981a4c3b450`): BSD spellF1 0.4615, macroF1 0.7010, 9 possessions (GT 17); baseline_smooth50 0.3256 / 0.6207. v1 scored 0.4857 / 0.7041 on the same window. Nothing was changed because of this check.

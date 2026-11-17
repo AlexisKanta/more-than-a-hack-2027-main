@@ -244,7 +244,7 @@ was not verified.
   The adopted variant beats v1 on all 6 cases (mean +0.054 spellF1, +0.011 macroF1). Adopted
   parameters: `switch_ha` 10, `alive_to_dead` 40, `dead_to_alive` 80, `alpha` 16, `floor` 0.5.
 
-## 8. Public-window correctness check (v1 file)
+## 8. Public-window correctness check
 
 Scored once, after the submission file was final, with
 `python evaluation/run_evaluation.py --no-detail` (frames 11185–18684, 5 minutes):
@@ -256,8 +256,10 @@ rank  submission                macroF1  spellF1   poss     dur  transF1  lat_f 
    3  baseline_smooth50          0.6207   0.3256     26    10.8   0.0816   +4.0   0.048  1.43
 ```
 
+The submitted v2 file (SHA-256 `aaf42ebb…3c450`) was scored once more, after it was final, as the same correctness check: spellF1 0.4615, macroF1 0.7010, 9 predicted possessions against 17 in the GT (baseline_smooth50: 0.3256 / 0.6207). The v2 score is 0.024 spellF1 below v1's on this window. That difference is well inside the noise of a 5-minute, 17-possession window, and choosing between versions with it would be tuning on the public GT, so the version was chosen by the bench alone (§7).
+
 The file is aligned and well formed, and its labels mean what we intended. The window also shows
-the under-segmentation listed in §9: 11 predicted possessions against 17 in the GT.
+the under-segmentation listed in §9: 11 (v1) and 9 (v2) predicted possessions against 17 in the GT.
 (`run_evaluation.py` also writes `evaluation/scoreboard.csv` and `evaluation/reports/`, which are
 gitignored.)
 
@@ -275,8 +277,7 @@ of about ±0.04 spellF1 applies to a full match, and the band on this window is 
   once-extended edges (the curve is flat there: 0.5971 at alpha 8), and the D pair (40, 80) is the
   top of the unextended D axis. Inside the original grid (alpha <= 8, floor {1, 5}) the same
   variant reaches 0.5954 (+0.051 over v1), so the gain does not rest on the extensions.
-- **Not re-checked on the public window.** §8 describes the v1 file. The v2 file was not scored
-  against the public GT; no parameter was chosen with it.
+- **Public window.** v2 was scored once on the public window as a correctness check (§8); no parameter or version was chosen with it.
 - **`bsd.bench --mode learned` is the v1 protocol.** While the committed
   `bsd/decode_params.json` has a `handover` block it does not overwrite that file; it writes
   `cache/decode_params_v1protocol.json`. The Stage 1 parameters come from
