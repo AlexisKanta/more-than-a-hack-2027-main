@@ -373,3 +373,97 @@ If the gate failed, skip this task and note it in the ledger.
   Report the BSD and baseline rows. Change nothing because of it, and record it in
   `docs/notes/bench-results.md`.
 - [ ] Commit the docs.
+
+---
+
+## Addendum (2026-11-17, ~13:45 EST): Stage 2 with the open DFL data
+
+The research found a usable source, recorded in `.superpowers/sdd/2026-11-17-bsd-improvements/stage2-research.md`:
+- **Data:** the DFL / IDSSE open data (Bassek et al., Scientific Data 2025), figshare article
+  28196177. It covers 7 Bundesliga matches.
+- **Licence:** CC BY 4.0.
+- **Download:** no login needed.
+- **Format:** positions XML at 25 fps, carrying per-frame `BallStatus` and `BallPossession` on the
+  ball's frames.
+
+The files are already downloaded to `data/dfl/` (gitignored) by the controller. Stage 3 is skipped
+for lack of time (ruling in the ledger).
+
+### Task 8: DFL fetch, loader and labels (runs in an isolated worktree, in parallel with Task 5)
+
+**Files:**
+- Create: `bsd/fetch_dfl.py`
+- Create: `bsd/io_dfl.py`
+- Test: `tests/test_io_dfl.py`
+
+Touch no other files, so the worktree merges cleanly.
+
+**Interfaces:**
+- `bsd.fetch_dfl`:
+  - `DFL_ARTICLE = 28196177`;
+  - `DFL_FILES`: a tuple of `(file_id, name, md5)` for all 21 files, from the figshare API, committed
+    as literals (figshare ids are 8 digits, so the no-5–6-digit-literal test doesn't trip; check it);
+  - `fetch(dest=None, matches=None)`: downloads to `data/dfl/` from
+    `https://ndownloader.figshare.com/files/<id>`, skips files already present, and verifies each MD5
+    (raising on a mismatch). CLI: `python -m bsd.fetch_dfl`.
+- `bsd.io_dfl.read_dfl(positions_xml, matchinfo_xml) -> (Tracking, labels)`:
+  - **Parser:** stream-parse with `xml.etree.ElementTree.iterparse`, clearing elements as you go
+    (the files are 350–420 MB).
+  - **Player slots:** each player FrameSet (one per person per GameSection) becomes a slot, so
+    `Tracking.team` is 0 for the home team and 1 for away. Home/away come from matchinformation.
+  - **Frames:** frames are indexed by DFL frame number N, consecutive within each half. Halves map
+    to `periods` like the other loaders. Keep gaps between halves out of the frame index, or mark
+    them as outside the periods.
+  - **Coordinates:** convert to the `Tracking` convention used by `bsd/io_metrica_csv.py`: metres,
+    origin at a pitch corner, 0..L by 0..W, with the pitch size from matchinformation. Document any
+    axis flip.
+  - **Labels:** int8 per frame, from the ball FrameSet. `BallStatus == 0` gives D. Otherwise
+    `BallPossession == 1` gives H and `== 2` gives A. Anything else is X, and frames outside
+    periods are X.
+  - **Ball:** keep the ball position even when it's dead (`degrade` applies BAR-ATH's
+    label-independent mask later).
+- `bsd.io_dfl.dfl_game(match_id) -> (Tracking, labels)`: cached to `cache/dfl_<match_id>.npz`,
+  following the `bar_ath_tracking()` caching style.
+
+**Tests:** a small synthetic positions XML and matchinformation XML written to `tmp_path`, with 2
+halves, 2 players per team and a ball. Assert:
+- the shapes, the team vector and the periods;
+- the coordinate conversion of one known point;
+- labels H/A/D/X from the attributes;
+- that the fetch MD5 check raises on a corrupted file (monkeypatch the download).
+
+**Real-data smoke check (aggregates only):** parse one real match and print:
+- the frame count, number of slots and periods;
+- label shares (H/A/D/X);
+- mean possession-spell length in seconds;
+- the ball-present rate.
+
+Compare these with the Metrica games (labels D ~30–40 %, possessions ~10 s). If the labels look
+wildly different, report it rather than tuning around it.
+
+### Task 9: Stage 2 experiments and gate (after Task 6)
+
+`python -m bsd.experiments stage2`, reusing the same machinery.
+- **Incumbent:** whatever Task 6 left.
+- **Primary:** the 6 Metrica cases. For each fold, the candidate trains on the 2 other Metrica
+  games plus the DFL games, each degraded with the same training seeds. The detector and emitter
+  are trained the same way.
+- **Secondary:** hold out each DFL game once, at seed 0. Compare the incumbent (Metrica only)
+  against the candidate (Metrica plus the other DFL games). The candidate's mean must not be more
+  than 0.010 below the incumbent's.
+- **Size control (in variant order):**
+  - (a) all DFL games with 1 training degrade seed each;
+  - (b) DFL rows weighted 0.5;
+  - (c) 3 training seeds, if time allows.
+- The gate is unchanged.
+- Hard time budget: as the controller sets it.
+
+### Task 10: Adopt Stage 2 (only if the gate passed)
+
+Same pattern as Task 4:
+- `decode_params.json` gains a `data` block;
+- `bsd.run` and `training_data` honour it;
+- `REPRODUCE.md` adds `python -m bsd.fetch_dfl`;
+- `docs/BSD.md` credits the DFL/IDSSE dataset (CC BY 4.0, citation) and describes the labels:
+  what was labelled, how, by whom, and how much;
+- run twice to confirm the SHA matches, then commit.
