@@ -1,3 +1,9 @@
+> **BSD entry.** This fork holds team BSD's submission code in `bsd/`. To regenerate
+> `BSD.csv` byte for byte, see **[REPRODUCE.md](REPRODUCE.md)**
+> (`python -m bsd.run --check-sha c22cc48bd24841d9dffb61f04aa1df26fac3647d17bb8a676c9f9d5d840f9eee`).
+> The technical document is **[docs/BSD.md](docs/BSD.md)**. Everything below is the organisers'
+> original README, unchanged.
+
 # More than a Hack 2027 — Phase 1: Ball Possession
 
 **Organised by [Metrica Sports](https://metrica-sports.com), [FC Barcelona](https://www.fcbarcelona.com)

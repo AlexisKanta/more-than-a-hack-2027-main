@@ -2,7 +2,9 @@
 
 Builds tracking -> features -> per-frame evidence -> Viterbi labels, writes
 ``evaluation/results/BSD.csv``, runs the official validator on it (non-zero exit if it fails)
-and prints label-free diagnostics. Run from the repository root.
+and prints label-free diagnostics. With ``--check-sha <hex>`` it also exits non-zero unless the
+written file's SHA-256 equals ``<hex>`` (the reproducibility check in REPRODUCE.md). Run from the
+repository root.
 
 The decoder costs of each mode, and the default mode (the one that won the sample-game bench),
 come from the committed ``bsd/decode_params.json`` written by ``python -m bsd.bench --mode
@@ -40,6 +42,12 @@ def _mix(seg):
     return "  ".join("%s %5.1f%%" % (s, 100.0 * np.sum(seg == k) / n) for k, s in enumerate("HADX"))
 
 
+def check_sha(actual, expected):
+    """Exit non-zero unless hex digest ``actual`` equals ``expected`` (case/whitespace ignored)."""
+    if actual.strip().lower() != expected.strip().lower():
+        sys.exit("SHA-256 mismatch: wrote %s, expected %s" % (actual, expected.strip()))
+
+
 def summarize(codes, periods, blocks, fps):
     spells = _spells(codes, periods)
     lengths = np.array([b - a for a, b, _ in spells], dtype=float)
@@ -63,6 +71,8 @@ def main(argv=None):
     ap.add_argument("--mode", choices=("heuristic", "learned"), default=adopted,
                     help="evidence model (default: %(default)s, the bench winner)")
     ap.add_argument("--no-tagging", action="store_true", help="do not use Smart Tagging")
+    ap.add_argument("--check-sha", metavar="HEX",
+                    help="exit non-zero unless the written file has this SHA-256")
     args = ap.parse_args(argv)
     params = tuned[args.mode]
     print("mode: %s  decode: %s" % (args.mode, params), flush=True)
@@ -102,6 +112,9 @@ def main(argv=None):
     print("\nwrote %s" % OUT_PATH.relative_to(ROOT))
     print("SHA-256: %s" % sha)
     summarize(codes, tr.periods, games.half_video_blocks(GAME), int(tr.fps))
+    if args.check_sha:
+        check_sha(sha, args.check_sha)
+        print("SHA-256 matches --check-sha")
     return 0
 
 
