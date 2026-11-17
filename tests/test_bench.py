@@ -163,3 +163,41 @@ def test_load_decode_params(tmp_path):
     assert adopted == "learned"
     assert tuned["heuristic"] == DecodeParams(40.0, 10.0, 20.0)
     assert tuned["learned"] == DecodeParams(80.0, 5.0, 2.5)
+
+
+def test_load_handover_config(tmp_path):
+    import json
+
+    ho = {"features": True, "detector": True, "k_s": 0.5, "through_dead_s": None, "alpha": 16.0, "floor": 0.5}
+    rec = {"adopted": "learned",
+           "heuristic": {"switch_ha": 40.0, "alive_to_dead": 10.0, "dead_to_alive": 20.0},
+           "learned": {"switch_ha": 10.0, "alive_to_dead": 40.0, "dead_to_alive": 80.0, "handover": ho}}
+    path = tmp_path / "p.json"
+    path.write_text(json.dumps(rec))
+    assert bench_mod.load_handover_config(path) == ho
+    assert bench_mod.load_handover_config(path, "heuristic") is None
+    adopted, tuned = bench_mod.load_decode_params(path)  # the extra block does not disturb the costs
+    assert tuned["learned"] == DecodeParams(10.0, 40.0, 80.0)
+    del rec["learned"]["handover"]
+    path.write_text(json.dumps(rec))
+    assert bench_mod.load_handover_config(path) is None
+
+
+def test_committed_params_have_stage1_handover():
+    ho = bench_mod.load_handover_config()
+    assert ho["features"] and ho["detector"] and ho["alpha"] == 16.0 and ho["floor"] == 0.5
+
+
+def test_training_data_meta_shapes(monkeypatch):
+    seen = []
+
+    def fake(g, profile, s, handover=False, with_fps=False):
+        seen.append((g, s, handover, with_fps))
+        return ("X", "y", "names", "periods", 5, 25) if with_fps else ("X", "y", "names", "periods", 5)
+
+    monkeypatch.setattr(bench_mod, "_degraded", fake)
+    monkeypatch.setattr(bench_mod, "gap_profile", lambda: {})
+    plain = bench_mod.training_data(games=(1,), seeds=(7,))
+    full = bench_mod.training_data(games=(1,), seeds=(7,), handover=True, meta=True)
+    assert plain == [("X", "y", "names")] and full == [("X", "y", "names", "periods", 5, 25)]
+    assert seen == [(1, 7, False, False), (1, 7, True, True)]

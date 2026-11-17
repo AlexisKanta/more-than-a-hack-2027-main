@@ -12,14 +12,22 @@
     "bench_gt_mean_poss_s": 10.7516
   },
   "learned": {
-    "switch_ha": 20.0,
-    "alive_to_dead": 20.0,
-    "dead_to_alive": 40.0,
-    "bench_spell_f1": 0.544,
-    "bench_macro_f1": 0.8372,
-    "bench_n_poss": 256.8333,
-    "bench_mean_poss_s": 14.6852,
+    "switch_ha": 10.0,
+    "alive_to_dead": 40.0,
+    "dead_to_alive": 80.0,
+    "bench_spell_f1": 0.5976,
+    "bench_macro_f1": 0.848,
+    "bench_n_poss": 259.0,
+    "bench_mean_poss_s": 14.5539,
     "bench_gt_n_poss": 349.3333,
-    "bench_gt_mean_poss_s": 10.7516
+    "bench_gt_mean_poss_s": 10.7516,
+    "handover": {
+      "features": true,
+      "detector": true,
+      "k_s": 0.5,
+      "through_dead_s": null,
+      "alpha": 16.0,
+      "floor": 0.5
+    }
   }
 }

@@ -36,9 +36,7 @@ import pandas as pd
 
 from bsd import bench
 from bsd.decode import DecodeParams, decode_periods, switch_cost_from
-from bsd.degrade import gap_profile
 from bsd.features import frame_features
-from bsd.handover import change_labels, train_detector
 from bsd.tracking import Tracking
 
 ROOT = bench.ROOT
@@ -161,10 +159,7 @@ def _fit_fold(job):
     if kind == "emit":
         em = bench.learned_emitter([(t[0], t[1], names) for t in train])
         return [em.emit(X, names) for X in tests]
-    visible_rate = 1.0 - float(gap_profile()["missing_rate"])
-    cs = [change_labels(t[1], t[2], t[3], k_s=cfg["k_s"], through_dead_s=cfg["through_dead_s"])
-          for t in train]
-    det = train_detector([t[0] for t in train], cs, names, seed=0, visible_rate=visible_rate)
+    det = bench.learned_detector(train, names, cfg["k_s"], cfg["through_dead_s"])
     return [det.p_change(X, names) for X in tests]
 
 

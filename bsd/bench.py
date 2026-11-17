@@ -116,10 +116,15 @@ def fold_train(pool, game):
     return [pool[(o, s)] for o in GAMES if o != game for s in train_seeds]
 
 
-def training_data(games=GAMES, seeds=TRAIN_SEEDS):
-    """[(X, labels, names)] of every sample game degraded with every seed (the final model's data)."""
+def training_data(games=GAMES, seeds=TRAIN_SEEDS, handover=False, meta=False):
+    """[(X, labels, names)] of every sample game degraded with every seed (the final model's data).
+
+    ``handover=True`` adds the hand-over feature columns; ``meta=True`` keeps the entries whole:
+    (X, labels, names, periods, n, fps).
+    """
     profile = gap_profile()
-    return [_degraded(g, profile, s)[:3] for g in games for s in seeds]
+    out = [_degraded(g, profile, s, handover, meta) for g in games for s in seeds]
+    return out if meta else [t[:3] for t in out]
 
 
 def heldout_logp(make_emit, held, pool):
@@ -209,6 +214,16 @@ def learned_emitter(train):
                          visible_rate=visible_rate)
 
 
+def learned_detector(train, names, k_s=0.5, through_dead_s=None):
+    """Hand-over change detector fitted on ``[(X, labels, periods, fps)]``, with ball visibility
+    weighted to BAR-ATH's in-period visible rate (as in ``learned_emitter``)."""
+    from bsd.handover import change_labels, train_detector
+
+    visible_rate = 1.0 - float(gap_profile()["missing_rate"])
+    cs = [change_labels(t[1], t[2], t[3], k_s=k_s, through_dead_s=through_dead_s) for t in train]
+    return train_detector([t[0] for t in train], cs, names, seed=0, visible_rate=visible_rate)
+
+
 def tune_all():
     """Tune both emitters on the same held-out data; save and return the adoption record."""
     from bsd.heuristic import heuristic_logp
@@ -240,6 +255,11 @@ def tune_all():
     print(text, end="")
     print("saved %s and %s" % (PARAMS_PATH.relative_to(ROOT), CACHE_PARAMS_PATH.relative_to(ROOT)))
     return out
+
+
+def load_handover_config(path=PARAMS_PATH, mode="learned"):
+    """The ``handover`` block of ``mode``'s entry in the tuning record, or None if it has none."""
+    return json.loads(Path(path).read_text())[mode].get("handover")
 
 
 def load_decode_params(path=PARAMS_PATH):

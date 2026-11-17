@@ -9,7 +9,9 @@ repository root.
 The decoder costs of each mode, and the default mode (the one that won the sample-game bench),
 come from the committed ``bsd/decode_params.json`` written by ``python -m bsd.bench --mode
 learned``. ``--mode learned`` trains the emitter on all three degraded sample games
-(``bsd.bench.training_data``) before scoring BAR-ATH.
+(``bsd.bench.training_data``) before scoring BAR-ATH. If the learned entry has a ``handover`` block
+the emitter also gets the hand-over features and, when ``detector`` is true, a change detector
+trained on the same data sets a per-frame H<->A switch cost (``bsd.decode.switch_cost_from``).
 """
 import argparse
 import subprocess
@@ -65,7 +67,7 @@ def summarize(codes, periods, blocks, fps):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sys.path.insert(0, str(ROOT))
-    from bsd.bench import load_decode_params
+    from bsd.bench import load_decode_params, load_handover_config
 
     adopted, tuned = load_decode_params()
     ap.add_argument("--mode", choices=("heuristic", "learned"), default=adopted,
@@ -75,23 +77,32 @@ def main(argv=None):
                     help="exit non-zero unless the written file has this SHA-256")
     args = ap.parse_args(argv)
     params = tuned[args.mode]
+    ho = load_handover_config(mode=args.mode) if args.mode == "learned" else None
     print("mode: %s  decode: %s" % (args.mode, params), flush=True)
+    print("hand-over detector: %s" % (ho if ho else "off"), flush=True)
     print("tagging: %s" % ("off (--no-tagging)" if args.no_tagging else "on"), flush=True)
 
     import games
-    from bsd.decode import decode_periods
+    from bsd.decode import decode_periods, switch_cost_from
     from bsd.features import frame_features
     from bsd.io_epts import bar_ath_tracking
     from bsd.output import write_submission
 
     tr = bar_ath_tracking()
-    X, names = frame_features(tr)
+    X, names = frame_features(tr, handover=bool(ho and ho["features"]))
+    switch_cost = None
     if args.mode == "learned":
-        from bsd.bench import learned_emitter, training_data
+        from bsd.bench import learned_detector, learned_emitter, training_data
 
         print("training emitter on the degraded sample games ...", flush=True)
-        train = training_data()
+        train = training_data(handover=bool(ho and ho["features"]), meta=bool(ho and ho["detector"]))
         logp = learned_emitter(train).emit(X, names)
+        if ho and ho["detector"]:
+            print("training hand-over detector ...", flush=True)
+            det = learned_detector([(t[0], t[1], t[3], t[5]) for t in train], names,
+                                   ho["k_s"], ho["through_dead_s"])
+            switch_cost = switch_cost_from(det.p_change(X, names), params.switch_ha,
+                                           ho["alpha"], ho["floor"])
         del train
     else:
         from bsd.heuristic import heuristic_logp
@@ -102,7 +113,7 @@ def main(argv=None):
 
         logp = logp + tag_bonus(len(tr.ball), int(tr.fps), tr.periods)
         assert np.isfinite(logp).all()
-    codes = decode_periods(logp, params, tr.periods, len(tr.ball))
+    codes = decode_periods(logp, params, tr.periods, len(tr.ball), switch_cost=switch_cost)
     sha = write_submission(codes, OUT_PATH)
 
     res = subprocess.run([sys.executable, str(VALIDATOR), str(OUT_PATH)], cwd=str(ROOT))

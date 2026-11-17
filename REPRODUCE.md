@@ -3,7 +3,7 @@
 One command regenerates the submission byte for byte and checks its hash:
 
 ```bash
-python -m bsd.run --check-sha c22cc48bd24841d9dffb61f04aa1df26fac3647d17bb8a676c9f9d5d840f9eee
+python -m bsd.run --check-sha aaf42ebbf0d41f0285877869f1fda9e4d5ee51068a98713b204ee981a4c3b450
 ```
 
 The steps below go from a fresh clone to that command. Run everything from the repository root.
@@ -38,23 +38,23 @@ pip install -r requirements-bsd.txt
 ## 3. Run
 
 ```bash
-python -m bsd.run --check-sha c22cc48bd24841d9dffb61f04aa1df26fac3647d17bb8a676c9f9d5d840f9eee
+python -m bsd.run --check-sha aaf42ebbf0d41f0285877869f1fda9e4d5ee51068a98713b204ee981a4c3b450
 ```
 
-This parses the tracking, trains the per-frame classifier from scratch on the three sample games
-(seeded, single-threaded), adds the Smart Tagging evidence, Viterbi-decodes each graded half
-with the costs in the committed `bsd/decode_params.json`, writes `evaluation/results/BSD.csv`,
+This parses the tracking, trains the per-frame classifier and the hand-over change detector from scratch on the three
+sample games (seeded, single-threaded), adds the Smart Tagging evidence, Viterbi-decodes each graded half
+with the costs and hand-over settings in the committed `bsd/decode_params.json`, writes `evaluation/results/BSD.csv`,
 runs `evaluation/validate_submission.py` on it, and exits non-zero if validation fails or the
 file's SHA-256 differs from the value given.
 
-- Runtime: about **2 min 45 s** on an Apple-silicon laptop (single-threaded).
+- Runtime: about **4 min 15 s** on an Apple-silicon laptop (single-threaded).
 - Expected SHA-256 of `evaluation/results/BSD.csv`:
-  `c22cc48bd24841d9dffb61f04aa1df26fac3647d17bb8a676c9f9d5d840f9eee`
-- Expected diagnostics: 256 possessions, mean 16.30 s, D share 34.8 % / 33.8 % per half.
+  `aaf42ebbf0d41f0285877869f1fda9e4d5ee51068a98713b204ee981a4c3b450`
+- Expected diagnostics: 223 possessions, mean 18.78 s, D share 34.8 % / 33.3 % per half.
 - Intermediate results are cached in `cache/` (gitignored). Deleting it forces a full rebuild and
   gives the same file.
-- Reference platform: the published SHA-256 was produced and verified (three clean runs, including
-  one from a fresh `git archive` checkout with an empty cache) on macOS arm64 with Python 3.14.6.
+- Reference platform: the published SHA-256 was produced and verified (two clean runs gave the same
+  hash; the earlier v1 file was also verified from a fresh `git archive` checkout) on macOS arm64 with Python 3.14.6.
   Byte-identity on other platforms is expected but was not verified.
 
 ## Optional

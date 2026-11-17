@@ -91,7 +91,17 @@ read by `bsd.run`; copy in `cache/decode_params.json`), so `python -m bsd.run` d
   the held-out test data still has the ball missing on ~98 % of dead frames, so any such
   residual is still rewarded by the bench.
 
-## BAR-ATH run (current, label-free)
+## BAR-ATH run, Stage 1 (current, label-free)
+
+`python -m bsd.run` (default mode learned with the `handover` block of `bsd/decode_params.json`:
+hand-over features, detector, alpha 16, floor 0.5; costs 10 / 40 / 80; tagging on; 4 min 14 s):
+validator OK, 223 possessions, mean 18.78 s, D share 34.8 % / 33.3 % per half. Two runs
+gave the same SHA-256 `aaf42ebbf0d41f0285877869f1fda9e4d5ee51068a98713b204ee981a4c3b450`.
+Shipped v1 (tag `v1-submitted`): 256 possessions, mean 16.30 s, D share 34.8 % / 33.8 %. The
+sample-game bench predicted about the same count as v1 (259 vs 257), so this is fewer and longer
+possessions on BAR-ATH, not more fragments. Nothing was tuned on these numbers.
+
+## BAR-ATH run (v1 record, label-free)
 
 `python -m bsd.run --no-tagging` (default mode learned; final model: all 3 games x seeds
 100-102, mirrored, visibility-weighted; 2 min 42 s): validator OK, 273 possessions, mean
@@ -131,10 +141,11 @@ The incumbent re-bench reproduces the committed record exactly (0.5440 / 0.8372 
 (20, 20, 40)). (d) is (c) with k_s 1.0. It scored 0.0073 below (c), which is less than +0.005,
 so the stage stopped early and (e) (through_dead_s 2.0) was not run. Edge extensions (first-pass
 edges): (b) switch_ha 5, D pair (80, 160), alpha 16, floor 0.5; (c) switch_ha 5, alpha 16,
-floor 0.5; (d) switch_ha 5, alpha 16, floor 10. (c)'s D pair (40, 80) was interior in its first
-pass and became best only over the extended grid. The best alpha is the extended edge 16 in all
-three detector variants (and (d)'s switch_ha is the extended edge 5), but the curve is flat
-there. Best spellF1 by alpha for (c): 0: 0.5644, 1: 0.5719, 2: 0.5824,
+floor 0.5; (d) switch_ha 5, alpha 16, floor 10. (c)'s first-pass best (original grid) was switch_ha 10, D pair (20, 40),
+alpha 8, floor 1 at 0.5954. The D axis was not extended, so the adopted D pair (40, 80) sits on
+the top edge of the unextended 3-value D axis; the adopted point also sits on the extended edges
+alpha 16 and floor 0.5. The best alpha is the extended edge 16 in all three detector variants
+(and (d)'s switch_ha is the extended edge 5), but the curve is flat there. Best spellF1 by alpha for (c): 0: 0.5644, 1: 0.5719, 2: 0.5824,
 4: 0.5942, 8: 0.5971, 16: 0.5976. For (b): 0: 0.5440, 4: 0.5686, 8: 0.5729, 16: 0.5737.
 
 Per case, incumbent -> (c) spellF1 (macroF1):
@@ -152,13 +163,12 @@ Per case, incumbent -> (c) spellF1 (macroF1):
 (>= 0.010), better on 6 of 6 cases (>= 4), mean macroF1 +0.0108 (drop <= 0.010). Winner config
 (`bsd/experiments_stage1.json` `winner`): hand-over emitter features, detector k_s 0.5,
 through_dead_s none, alpha 16, floor 0.5, switch_ha 10, alive_to_dead 40, dead_to_alive 80.
-Adoption in `bsd.run` is the next task. `bsd.run` and `bsd/decode_params.json` are unchanged
-here.
+Adopted in `bsd.run` and `bsd/decode_params.json` (see "BAR-ATH run" above).
 
 Caveats: the decoder costs are tuned in sample on the 6 reported cases, as above. The detector
 variants searched 192-256 points and the incumbent 9, so their selection bias is larger. Even
-inside the original grid (alpha <= 8), (c) reaches 0.5971, and the margin (+0.054) is far above
-this bias and the ~0.04 noise band. The hand-over features alone, (a), already give +0.020 with
+inside the original grid (alpha <= 8, floor {1, 5}), (c) reaches 0.5954 (+0.051 over the
+incumbent; 0.5971 needs the extended floor 0.5), and the margin is far above this bias and the ~0.04 noise band. The hand-over features alone, (a), already give +0.020 with
 the same 9-point search as the incumbent.
 
 ## Before R13 (record)
