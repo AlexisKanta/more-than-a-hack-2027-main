@@ -1,7 +1,13 @@
 """Hand-over (possession change) labels derived from a per-frame H/A/D/X label array."""
+from dataclasses import dataclass
+
 import numpy as np
+from sklearn.ensemble import HistGradientBoostingClassifier
+from threadpoolctl import threadpool_limits
 
 from bsd.decode import A, D, H, X
+from bsd.features import mirror
+from bsd.model import HGB_PARAMS, STRIDE, visibility_weights
 
 
 def change_labels(labels, periods, fps, k_s=0.5, through_dead_s=None):
@@ -40,3 +46,49 @@ def change_labels(labels, periods, fps, k_s=0.5, through_dead_s=None):
             win = out[lo:hi]
             win[win == 0] = 1
     return out
+
+
+@dataclass(frozen=True)
+class Detector:
+    """Binary "possession changes near this frame" classifier (team-symmetric)."""
+    model: HistGradientBoostingClassifier
+    names: tuple
+
+    def p_change(self, X, names):
+        """(F,) probability of class 1: mean over X and its mirror, rounded to 6 decimals."""
+        if list(names) != list(self.names):
+            raise ValueError("feature names differ from the ones the detector was trained on")
+        X = np.asarray(X, dtype=np.float32)
+        with threadpool_limits(limits=1):
+            p = self.model.predict_proba(X)[:, 1]
+            pm = self.model.predict_proba(mirror(X, list(self.names)))[:, 1]
+        return np.round(0.5 * (p + pm), 6)
+
+
+def train_detector(Xs, cs, names, seed=0, visible_rate=None):
+    """Fit on every ``STRIDE``-th frame of each (X, change-label) pair plus its mirror.
+
+    Rows labelled -1 are dropped; a change is team-symmetric so mirrored copies keep their label.
+    """
+    names = list(names)
+    if visible_rate is not None and "ball_visible" not in names:
+        raise ValueError("visible_rate needs a ball_visible feature column")
+    feats, labels = [], []
+    for Xg, c in zip(Xs, cs):
+        Xg = np.asarray(Xg, dtype=np.float32)[::STRIDE]
+        c = np.asarray(c)[::STRIDE]
+        keep = c >= 0
+        Xk, ck = Xg[keep], c[keep].astype(np.int64)
+        feats += [Xk, mirror(Xk, names)]
+        labels += [ck, ck]
+    Xt = np.concatenate(feats)
+    yt = np.concatenate(labels)
+    if len(np.unique(yt)) < 2:
+        raise ValueError("training labels must contain both change and no-change frames")
+    weights = None
+    if visible_rate is not None:
+        weights = visibility_weights(Xt[:, names.index("ball_visible")] > 0, yt, visible_rate)
+    model = HistGradientBoostingClassifier(random_state=seed, **HGB_PARAMS)
+    with threadpool_limits(limits=1):
+        model.fit(Xt, yt, sample_weight=weights)
+    return Detector(model, tuple(names))

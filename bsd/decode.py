@@ -21,8 +21,21 @@ def _cost_matrix(p):
     return c.tolist()
 
 
-def viterbi(logp, p):
-    """Max-score path of Σ logp[t, s_t] − Σ transition costs; (F,3) -> (F,) int8."""
+def switch_cost_from(p_change, switch_ha, alpha, floor):
+    """Per-frame H<->A cost ``max(floor, switch_ha - alpha*logit(p))``; NaN p gives ``switch_ha``."""
+    p = np.asarray(p_change, dtype=float)
+    if alpha == 0:
+        return np.full(len(p), float(switch_ha))
+    q = np.clip(np.where(np.isnan(p), 0.5, p), 1e-4, 1 - 1e-4)
+    cost = np.maximum(floor, switch_ha - alpha * np.log(q / (1 - q)))
+    return np.round(np.where(np.isnan(p), float(switch_ha), cost), 6)
+
+
+def viterbi(logp, p, switch_cost=None):
+    """Max-score path of Σ logp[t, s_t] − Σ transition costs; (F,3) -> (F,) int8.
+
+    ``switch_cost[t]`` (optional) replaces ``p.switch_ha`` for the H<->A move from t-1 into t.
+    """
     logp = np.asarray(logp, dtype=float)
     if logp.ndim != 2 or logp.shape[1] != 3:
         raise ValueError("logp must have shape (F, 3)")
@@ -31,11 +44,21 @@ def viterbi(logp, p):
     n = len(logp)
     if n == 0:
         return np.zeros(0, dtype=np.int8)
+    sc = None
+    if switch_cost is not None:
+        switch_cost = np.asarray(switch_cost, dtype=float)
+        if switch_cost.shape != (n,):
+            raise ValueError("switch_cost must have shape (F,)")
+        if not np.isfinite(switch_cost).all():
+            raise ValueError("switch_cost must be finite")
+        sc = np.round(switch_cost, 6).tolist()
     rows = np.round(logp, 6).tolist()
     c = _cost_matrix(p)
     back = np.zeros((n, 3), dtype=np.int8)
     score = rows[0]
     for t in range(1, n):
+        if sc is not None:
+            c[0][1] = c[1][0] = sc[t]
         new = [0.0, 0.0, 0.0]
         bt = back[t]
         for s in range(3):
@@ -55,9 +78,10 @@ def viterbi(logp, p):
     return out
 
 
-def decode_periods(logp, p, periods, n_frames):
+def decode_periods(logp, p, periods, n_frames, switch_cost=None):
     """Decode each (period, first, last) inclusive range independently; X elsewhere."""
     out = np.full(n_frames, X, dtype=np.int8)
     for _, first, last in periods:
-        out[first:last + 1] = viterbi(logp[first:last + 1], p)
+        sc = None if switch_cost is None else np.asarray(switch_cost)[first:last + 1]
+        out[first:last + 1] = viterbi(logp[first:last + 1], p, sc)
     return out

@@ -57,3 +57,48 @@ def test_speed_80k():
     t = time.time()
     viterbi(logp, P)
     assert time.time() - t < 5
+
+
+def test_viterbi_switch_cost_none_identical():
+    from bsd.decode import DecodeParams
+    rng = np.random.default_rng(3)
+    logp = rng.normal(size=(500, 3))
+    p = DecodeParams(20, 20, 40)
+    base = viterbi(logp, p)
+    assert (base == viterbi(logp, p, switch_cost=None)).all()
+    assert (base == viterbi(logp, p, switch_cost=np.full(500, 20.0))).all()
+
+
+def test_viterbi_local_cheap_switch():
+    from bsd.decode import DecodeParams
+    logp = np.zeros((200, 3))
+    logp[:100, 0] = 1.0
+    logp[100:, 1] = 1.0
+    p = DecodeParams(1000, 1000, 1000)
+    assert len(np.unique(viterbi(logp, p, np.full(200, 1000.0)))) == 1
+    sc = np.full(200, 1000.0)
+    sc[100] = 0.0
+    out = viterbi(logp, p, sc)
+    assert (out[:100] == 0).all() and (out[100:] == 1).all()
+
+
+def test_switch_cost_nan_falls_back():
+    from bsd.decode import switch_cost_from
+    out = switch_cost_from(np.array([np.nan, 0.5]), 20, 4, 1)
+    assert np.allclose(out, [20, 20])
+
+
+def test_switch_cost_monotone():
+    from bsd.decode import switch_cost_from
+    out = switch_cost_from(np.linspace(0, 1, 101), 20, 4, 1)
+    assert (np.diff(out) <= 0).all() and (out >= 1).all()
+    assert (switch_cost_from(np.array([0.9]), 20, 0, 50) == 20).all()
+
+
+def test_switch_cost_bad_input():
+    from bsd.decode import DecodeParams
+    p = DecodeParams(20, 20, 40)
+    with pytest.raises(ValueError):
+        viterbi(np.zeros((5, 3)), p, np.full(4, 20.0))
+    with pytest.raises(ValueError):
+        viterbi(np.zeros((5, 3)), p, np.array([20, 20, np.nan, 20, 20.0]))

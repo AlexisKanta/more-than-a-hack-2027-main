@@ -37,3 +37,43 @@ def test_change_labels_x_unscored():
     out = change_labels(lab, [(1, 0, 40)], fps=10)
     assert (out[20:25] == -1).all()
     assert out[41:].tolist() == [-1] * (len(lab) - 41)  # outside periods
+
+
+def _synthetic(n=900, seed=0):
+    from bsd.features import mirror  # noqa: F401
+    rng = np.random.default_rng(seed)
+    names = ["a_home", "a_away", "d_diff", "ball_visible"]
+    X = rng.normal(size=(n, 4)).astype(np.float32)
+    X[:, 3] = (rng.random(n) > 0.3)
+    y = (X[:, 0] + 0.5 * X[:, 2] > 0.8).astype(np.int8)
+    return X, y, names
+
+
+def test_detector_mirror_symmetric():
+    import pytest
+    from bsd.features import mirror
+    from bsd.handover import train_detector
+    X, y, names = _synthetic()
+    det = train_detector([X], [y], names, visible_rate=0.6)
+    p = det.p_change(X, names)
+    assert p.shape == (len(X),) and p.dtype == np.float64
+    pm = det.p_change(mirror(X, names), names)
+    assert np.abs(p - pm).max() < 1e-9
+    with pytest.raises(ValueError):
+        det.p_change(X, names[::-1])
+
+
+def test_detector_drops_unscored_rows():
+    from bsd.handover import train_detector
+    X, y, names = _synthetic()
+    y = y.copy()
+    y[::2] = -1
+    assert train_detector([X], [y], names).names == tuple(names)
+
+
+def test_detector_needs_both_classes():
+    import pytest
+    from bsd.handover import train_detector
+    X, y, names = _synthetic()
+    with pytest.raises(ValueError):
+        train_detector([X], [np.zeros_like(y)], names)
