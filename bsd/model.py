@@ -117,19 +117,34 @@ def visibility_weights(visible, y, visible_rate):
     return w
 
 
-def train_emitter(Xs, ys, names, seed=0, visible_rate=None, hgb=None, stride=None):
+def dataset_row_weights(weights, row_counts):
+    """Per-row weights from one weight per training dataset (``row_counts`` rows each), or None
+    when ``weights`` is None or all ones (the unweighted default)."""
+    if weights is None:
+        return None
+    weights = [float(w) for w in weights]
+    if len(weights) != len(row_counts):
+        raise ValueError("need one weight per training dataset")
+    if all(w == 1.0 for w in weights):
+        return None
+    return np.repeat(np.array(weights, dtype=np.float64), row_counts)
+
+
+def train_emitter(Xs, ys, names, seed=0, visible_rate=None, hgb=None, stride=None, weights=None):
     """Fit on every ``STRIDE``-th frame of each (X, y) pair plus its mirror; X-label frames dropped.
 
     ``visible_rate`` (e.g. BAR-ATH's in-period ball-visible fraction) turns on
     ``visibility_weights`` computed from the ``ball_visible`` column. ``hgb`` (a dict merged over
     ``HGB_PARAMS``) and ``stride`` (instead of ``STRIDE``) are overrides for experiments; the
-    defaults (None) train exactly the default model.
+    defaults (None) train exactly the default model. ``weights`` (one per (X, y) pair, e.g. to
+    down-weight another data source) multiplies the rows of each pair, on top of the visibility
+    weights; None or all ones is the default model.
     """
     names = list(names)
     stride = STRIDE if stride is None else int(stride)
     if visible_rate is not None and "ball_visible" not in names:
         raise ValueError("visible_rate needs a ball_visible feature column")
-    feats, labels = [], []
+    feats, labels, counts_per = [], [], []
     for Xg, y in zip(Xs, ys):
         Xg = np.asarray(Xg, dtype=np.float32)[::stride]
         y = np.asarray(y)[::stride]
@@ -137,6 +152,8 @@ def train_emitter(Xs, ys, names, seed=0, visible_rate=None, hgb=None, stride=Non
         Xk, yk = Xg[keep], y[keep].astype(np.int64)
         feats += [Xk, mirror(Xk, names)]
         labels += [yk, SWAP[yk]]
+        counts_per.append(2 * len(yk))
+    src_w = dataset_row_weights(weights, counts_per)
     Xt = np.concatenate(feats)
     yt = np.concatenate(labels)
     counts = np.bincount(yt, minlength=3)
@@ -145,6 +162,8 @@ def train_emitter(Xs, ys, names, seed=0, visible_rate=None, hgb=None, stride=Non
     weights = None
     if visible_rate is not None:
         weights = visibility_weights(Xt[:, names.index("ball_visible")] > 0, yt, visible_rate)
+    if src_w is not None:
+        weights = src_w if weights is None else weights * src_w
     model = HistGradientBoostingClassifier(random_state=seed, **{**HGB_PARAMS, **(hgb or {})})
     with threadpool_limits(limits=1):
         model.fit(Xt, yt, sample_weight=weights)

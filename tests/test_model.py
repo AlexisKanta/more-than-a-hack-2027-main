@@ -180,3 +180,42 @@ def test_ensemble_averages_probabilities_before_log():
     other = train_emitter([_game(3)[0]], [_game(3)[1]], NAMES, seed=0)  # different prior
     with pytest.raises(ValueError):
         model_mod.EnsembleEmitter((a, other))
+
+
+def test_train_emitter_dataset_weights():
+    games = [_game(1), _game(2)]
+    Xs, ys = [g[0] for g in games], [g[1] for g in games]
+    Xt, _ = _game(9)
+    plain = train_emitter(Xs, ys, NAMES, seed=0)
+    # weights=None and all-ones weights are the default model
+    for w in (None, [1.0, 1.0]):
+        np.testing.assert_array_equal(plain.logp(Xt), train_emitter(Xs, ys, NAMES, seed=0, weights=w).logp(Xt))
+    # a down-weighted dataset changes the model; prior stays the row frequency
+    half = train_emitter(Xs, ys, NAMES, seed=0, weights=[1.0, 0.5])
+    assert not np.array_equal(plain.logp(Xt), half.logp(Xt))
+    np.testing.assert_array_equal(plain.prior, half.prior)
+    with pytest.raises(ValueError):
+        train_emitter(Xs, ys, NAMES, seed=0, weights=[1.0])
+
+
+def test_dataset_row_weights_multiply_visibility_weights(monkeypatch):
+    captured = {}
+    orig = model_mod.HistGradientBoostingClassifier.fit
+
+    def spy(self, X, y, sample_weight=None):
+        captured.setdefault("w", []).append(sample_weight)
+        return orig(self, X, y, sample_weight=sample_weight)
+    monkeypatch.setattr(model_mod.HistGradientBoostingClassifier, "fit", spy)
+    names = NAMES[:3] + ["ball_visible"]
+    games = []
+    for s in (1, 2):
+        Xg, y = _game(s)
+        Xg[:, 3] = np.isfinite(Xg[:, 0])
+        games.append((Xg, y))
+    Xs, ys = [g[0] for g in games], [g[1] for g in games]
+    train_emitter(Xs, ys, names, seed=0, visible_rate=0.6)
+    train_emitter(Xs, ys, names, seed=0, visible_rate=0.6, weights=[1.0, 0.5])
+    w0, w1 = captured["w"]
+    n0 = 2 * int((ys[0][::model_mod.STRIDE] != X).sum())  # rows of dataset 0 (+ mirror)
+    np.testing.assert_allclose(w1[:n0], w0[:n0])
+    np.testing.assert_allclose(w1[n0:], 0.5 * w0[n0:])

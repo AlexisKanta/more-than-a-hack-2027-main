@@ -7,7 +7,7 @@ from threadpoolctl import threadpool_limits
 
 from bsd.decode import A, D, H, X
 from bsd.features import mirror
-from bsd.model import HGB_PARAMS, STRIDE, visibility_weights
+from bsd.model import HGB_PARAMS, STRIDE, dataset_row_weights, visibility_weights
 
 
 def change_labels(labels, periods, fps, k_s=0.5, through_dead_s=None):
@@ -65,22 +65,28 @@ class Detector:
         return np.round(0.5 * (p + pm), 6)
 
 
-def train_detector(Xs, cs, names, seed=0, visible_rate=None):
+def train_detector(Xs, cs, names, seed=0, visible_rate=None, stride=None, weights=None):
     """Fit on every ``STRIDE``-th frame of each (X, change-label) pair plus its mirror.
 
     Rows labelled -1 are dropped; a change is team-symmetric so mirrored copies keep their label.
+    ``stride`` (instead of ``STRIDE``, e.g. 1 for pre-strided inputs) and ``weights`` (one per
+    pair, multiplied on top of the visibility weights) are for experiments; the defaults (None)
+    train exactly the default model.
     """
     names = list(names)
+    stride = STRIDE if stride is None else int(stride)
     if visible_rate is not None and "ball_visible" not in names:
         raise ValueError("visible_rate needs a ball_visible feature column")
-    feats, labels = [], []
+    feats, labels, counts_per = [], [], []
     for Xg, c in zip(Xs, cs):
-        Xg = np.asarray(Xg, dtype=np.float32)[::STRIDE]
-        c = np.asarray(c)[::STRIDE]
+        Xg = np.asarray(Xg, dtype=np.float32)[::stride]
+        c = np.asarray(c)[::stride]
         keep = c >= 0
         Xk, ck = Xg[keep], c[keep].astype(np.int64)
         feats += [Xk, mirror(Xk, names)]
         labels += [ck, ck]
+        counts_per.append(2 * len(ck))
+    src_w = dataset_row_weights(weights, counts_per)
     Xt = np.concatenate(feats)
     yt = np.concatenate(labels)
     if len(np.unique(yt)) < 2:
@@ -88,6 +94,8 @@ def train_detector(Xs, cs, names, seed=0, visible_rate=None):
     weights = None
     if visible_rate is not None:
         weights = visibility_weights(Xt[:, names.index("ball_visible")] > 0, yt, visible_rate)
+    if src_w is not None:
+        weights = src_w if weights is None else weights * src_w
     model = HistGradientBoostingClassifier(random_state=seed, **HGB_PARAMS)
     with threadpool_limits(limits=1):
         model.fit(Xt, yt, sample_weight=weights)

@@ -125,3 +125,35 @@ def test_combine_tweaks_and_runtime_estimates():
     assert ex.est_run_seconds({"emit": 100.0, "det": 0.0}, {"emit": 100.0, "det": 0.0}) == ex.RUN_SECONDS
     costs = {"a_ensemble": {"emit": 300.0, "det": 50.0}, "d_seeds": {"emit": 200.0, "det": 100.0}}
     assert ex._prior_cost(["a_ensemble", "d_seeds"], costs, inc) == {"emit": 600.0, "det": 100.0}
+
+
+def test_secondary_check_rule():
+    inc = pd.DataFrame({"game": ["m1", "m2", "m3"], "spell_f1": [0.50, 0.60, 0.70]})
+    ok = ex.secondary_check(inc, inc.assign(spell_f1=inc["spell_f1"] - 0.010))
+    assert ok["d_spell"] == pytest.approx(-0.010) and ok["passed"] is True
+    bad = ex.secondary_check(inc, inc.assign(spell_f1=inc["spell_f1"] - 0.0101))
+    assert bad["passed"] is False
+    up = ex.secondary_check(inc, inc.assign(spell_f1=inc["spell_f1"] + [0.03, -0.01, 0.0]).iloc[::-1])
+    assert up["d_spell"] == pytest.approx(0.02 / 3, abs=1e-6) and up["n_better"] == 1 and up["passed"] is True
+    with pytest.raises(ValueError):
+        ex.secondary_check(inc, inc.iloc[:2])
+
+
+def test_stage2_adoption_needs_gate_and_secondary():
+    assert ex.stage2_adopt({"passed": True}, {"passed": True}) is True
+    assert ex.stage2_adopt({"passed": True}, {"passed": False}) is False
+    assert ex.stage2_adopt({"passed": False}, {"passed": True}) is False
+    assert ex.stage2_adopt({"passed": True}, None) is False
+
+
+def test_stage2_variants_and_run_estimate():
+    v = ex.STAGE2_VARIANTS
+    assert list(v) == ["a_dfl", "b_dfl_w05", "c_dfl_seeds3"]
+    assert v["a_dfl"] == {"dfl_seeds": [100], "dfl_weight": 1.0}
+    assert v["b_dfl_w05"] == {"dfl_seeds": [100], "dfl_weight": 0.5}
+    assert v["c_dfl_seeds3"]["dfl_seeds"] == list(ex.bench.TRAIN_SEEDS)
+    inc = {"emit": 100.0, "det": 50.0}
+    # no extra cost -> today's run; the final model has 1.5x a fold's Metrica rows (3 games, not 2)
+    assert ex.stage2_est_run_seconds(inc, inc) == ex.RUN_SECONDS
+    est = ex.stage2_est_run_seconds({"emit": 250.0, "det": 125.0}, inc)
+    assert est == pytest.approx(ex.RUN_SECONDS + ex.FINAL_EMIT_S * 150 / 150 + ex.FINAL_DET_S * 75 / 75)

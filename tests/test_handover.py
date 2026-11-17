@@ -77,3 +77,21 @@ def test_detector_needs_both_classes():
     X, y, names = _synthetic()
     with pytest.raises(ValueError):
         train_detector([X], [np.zeros_like(y)], names)
+
+
+def test_detector_stride_and_weights_defaults_unchanged():
+    from bsd.handover import train_detector
+    from bsd.model import STRIDE
+    X, y, names = _synthetic()
+    X2, y2, _ = _synthetic(seed=1)
+    plain = train_detector([X, X2], [y, y2], names, visible_rate=0.6)
+    p = plain.p_change(X, names)
+    for kw in ({"stride": None, "weights": None}, {"stride": STRIDE}, {"weights": [1.0, 1.0]}):
+        np.testing.assert_array_equal(p, train_detector([X, X2], [y, y2], names, visible_rate=0.6, **kw)
+                                      .p_change(X, names))
+    # pre-strided input with stride 1 is the same model
+    pre = train_detector([X[::STRIDE], X2[::STRIDE]], [y[::STRIDE], y2[::STRIDE]], names, visible_rate=0.6,
+                         stride=1)
+    np.testing.assert_array_equal(p, pre.p_change(X, names))
+    w = train_detector([X, X2], [y, y2], names, visible_rate=0.6, weights=[1.0, 0.5])
+    assert not np.array_equal(p, w.p_change(X, names))
