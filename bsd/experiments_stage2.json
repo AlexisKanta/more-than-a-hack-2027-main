@@ -1,0 +1,614 @@
+{
+  "stage": 2,
+  "protocol": {
+    "games": [
+      1,
+      2,
+      3
+    ],
+    "heldout_seeds": [
+      0,
+      1
+    ],
+    "train_seeds": [
+      100,
+      101,
+      102
+    ],
+    "dfl_games": [
+      "J03WMX",
+      "J03WN1",
+      "J03WOH",
+      "J03WOY",
+      "J03WPY",
+      "J03WQQ",
+      "J03WR9"
+    ],
+    "secondary_games": [
+      "J03WMX",
+      "J03WN1",
+      "J03WOH"
+    ],
+    "secondary_seed": 0,
+    "secondary": "each DFL game held out once; incumbent trained on 3 Metrica games x train_seeds, candidate on those plus the other DFL games; decoded at the variant's primary-tuned params (no tuning on DFL)",
+    "variants": {
+      "a_dfl": {
+        "dfl_seeds": [
+          100
+        ],
+        "dfl_weight": 1.0
+      },
+      "b_dfl_w05": {
+        "dfl_seeds": [
+          100
+        ],
+        "dfl_weight": 0.5
+      },
+      "c_dfl_seeds3": {
+        "dfl_seeds": [
+          100,
+          101,
+          102
+        ],
+        "dfl_weight": 1.0
+      }
+    },
+    "grid": {
+      "switch_ha": [
+        10,
+        20,
+        40
+      ],
+      "dead": [
+        [
+          10,
+          20
+        ],
+        [
+          20,
+          40
+        ],
+        [
+          40,
+          80
+        ]
+      ],
+      "alpha": [
+        0,
+        1,
+        2,
+        4,
+        8
+      ],
+      "floor": [
+        1,
+        5
+      ]
+    },
+    "gate": {
+      "min_d_spell": 0.01,
+      "min_better": 4,
+      "max_macro_drop": 0.01
+    },
+    "secondary_max_drop": 0.01,
+    "early_stop_gain": 0.005,
+    "run_limit_s": 1200,
+    "run_seconds_today": 254,
+    "labels": "DFL labels are the provider's per-frame BallStatus/BallPossession flags (more dead time, shorter spells than the Metrica event-derived labels)"
+  },
+  "dfl_label_shares": {
+    "J03WMX": {
+      "H": 0.2679,
+      "A": 0.3169,
+      "D": 0.4151,
+      "X": 0.0
+    },
+    "J03WN1": {
+      "H": 0.2573,
+      "A": 0.2257,
+      "D": 0.517,
+      "X": 0.0
+    },
+    "J03WOH": {
+      "H": 0.2851,
+      "A": 0.2392,
+      "D": 0.4757,
+      "X": 0.0
+    }
+  },
+  "reference": {
+    "spell_f1": 0.5976,
+    "macro_f1": 0.848
+  },
+  "incumbent": {
+    "config": {
+      "features": true,
+      "detector": true,
+      "k_s": 0.5,
+      "through_dead_s": null,
+      "train_seeds": [
+        100,
+        101,
+        102
+      ],
+      "dfl_games": [],
+      "dfl_seeds": [],
+      "dfl_weight": 1.0,
+      "decode": {
+        "switch_ha": 10.0,
+        "alive_to_dead": 40.0,
+        "dead_to_alive": 80.0,
+        "alpha": 16.0,
+        "floor": 0.5
+      }
+    },
+    "n_points": 192,
+    "mean": {
+      "spell_f1": 0.5976,
+      "macro_f1": 0.848,
+      "n_poss": 259.0,
+      "mean_poss_s": 14.5539,
+      "gt_n_poss": 349.3333,
+      "gt_mean_poss_s": 10.7516
+    },
+    "cases": [
+      {
+        "game": 1,
+        "seed": 0,
+        "spell_f1": 0.562602,
+        "macro_f1": 0.842546,
+        "n_poss": 262,
+        "mean_poss_s": 13.64855,
+        "gt_n_poss": 353,
+        "gt_mean_poss_s": 9.844873
+      },
+      {
+        "game": 2,
+        "seed": 0,
+        "spell_f1": 0.648921,
+        "macro_f1": 0.847654,
+        "n_poss": 238,
+        "mean_poss_s": 14.898151,
+        "gt_n_poss": 318,
+        "gt_mean_poss_s": 11.542767
+      },
+      {
+        "game": 3,
+        "seed": 0,
+        "spell_f1": 0.55887,
+        "macro_f1": 0.854209,
+        "n_poss": 260,
+        "mean_poss_s": 16.110923,
+        "gt_n_poss": 377,
+        "gt_mean_poss_s": 10.867268
+      },
+      {
+        "game": 1,
+        "seed": 1,
+        "spell_f1": 0.615088,
+        "macro_f1": 0.845757,
+        "n_poss": 270,
+        "mean_poss_s": 13.400148,
+        "gt_n_poss": 353,
+        "gt_mean_poss_s": 9.844873
+      },
+      {
+        "game": 2,
+        "seed": 1,
+        "spell_f1": 0.631095,
+        "macro_f1": 0.843457,
+        "n_poss": 248,
+        "mean_poss_s": 14.272097,
+        "gt_n_poss": 318,
+        "gt_mean_poss_s": 11.542767
+      },
+      {
+        "game": 3,
+        "seed": 1,
+        "spell_f1": 0.569066,
+        "macro_f1": 0.854367,
+        "n_poss": 276,
+        "mean_poss_s": 14.993478,
+        "gt_n_poss": 377,
+        "gt_mean_poss_s": 10.867268
+      }
+    ],
+    "train_cpu_s": {
+      "emit": 128.0,
+      "det": 42.5
+    },
+    "secondary": {
+      "mean": {
+        "spell_f1": 0.3275,
+        "macro_f1": 0.6331,
+        "n_poss": 262.3333,
+        "mean_poss_s": 17.4785,
+        "gt_n_poss": 471.0,
+        "gt_mean_poss_s": 6.4371
+      },
+      "cases": [
+        {
+          "game": "J03WMX",
+          "seed": 0,
+          "spell_f1": 0.327827,
+          "macro_f1": 0.661682,
+          "n_poss": 276,
+          "mean_poss_s": 17.240435,
+          "gt_n_poss": 511,
+          "gt_mean_poss_s": 6.682505
+        },
+        {
+          "game": "J03WN1",
+          "seed": 0,
+          "spell_f1": 0.316244,
+          "macro_f1": 0.616588,
+          "n_poss": 288,
+          "mean_poss_s": 14.982917,
+          "gt_n_poss": 500,
+          "gt_mean_poss_s": 5.47016
+        },
+        {
+          "game": "J03WOH",
+          "seed": 0,
+          "spell_f1": 0.33856,
+          "macro_f1": 0.621019,
+          "n_poss": 223,
+          "mean_poss_s": 20.212018,
+          "gt_n_poss": 402,
+          "gt_mean_poss_s": 7.158706
+        }
+      ]
+    }
+  },
+  "variants": {
+    "a_dfl": {
+      "config": {
+        "features": true,
+        "detector": true,
+        "k_s": 0.5,
+        "through_dead_s": null,
+        "train_seeds": [
+          100,
+          101,
+          102
+        ],
+        "dfl_games": [
+          "J03WMX",
+          "J03WN1",
+          "J03WOH",
+          "J03WOY",
+          "J03WPY",
+          "J03WQQ",
+          "J03WR9"
+        ],
+        "dfl_seeds": [
+          100
+        ],
+        "dfl_weight": 1.0,
+        "decode": {
+          "switch_ha": 5.0,
+          "alive_to_dead": 20.0,
+          "dead_to_alive": 40.0,
+          "alpha": 8.0,
+          "floor": 1.0
+        }
+      },
+      "n_points": 192,
+      "mean": {
+        "spell_f1": 0.5988,
+        "macro_f1": 0.8542,
+        "n_poss": 263.6667,
+        "mean_poss_s": 13.8663,
+        "gt_n_poss": 349.3333,
+        "gt_mean_poss_s": 10.7516
+      },
+      "cases": [
+        {
+          "game": 1,
+          "seed": 0,
+          "spell_f1": 0.558699,
+          "macro_f1": 0.846214,
+          "n_poss": 262,
+          "mean_poss_s": 13.016031,
+          "gt_n_poss": 353,
+          "gt_mean_poss_s": 9.844873
+        },
+        {
+          "game": 2,
+          "seed": 0,
+          "spell_f1": 0.648325,
+          "macro_f1": 0.851574,
+          "n_poss": 249,
+          "mean_poss_s": 13.803855,
+          "gt_n_poss": 318,
+          "gt_mean_poss_s": 11.542767
+        },
+        {
+          "game": 3,
+          "seed": 0,
+          "spell_f1": 0.568779,
+          "macro_f1": 0.852562,
+          "n_poss": 270,
+          "mean_poss_s": 15.257037,
+          "gt_n_poss": 377,
+          "gt_mean_poss_s": 10.867268
+        },
+        {
+          "game": 1,
+          "seed": 1,
+          "spell_f1": 0.603612,
+          "macro_f1": 0.869755,
+          "n_poss": 256,
+          "mean_poss_s": 13.3475,
+          "gt_n_poss": 353,
+          "gt_mean_poss_s": 9.844873
+        },
+        {
+          "game": 2,
+          "seed": 1,
+          "spell_f1": 0.632867,
+          "macro_f1": 0.851078,
+          "n_poss": 254,
+          "mean_poss_s": 13.656378,
+          "gt_n_poss": 318,
+          "gt_mean_poss_s": 11.542767
+        },
+        {
+          "game": 3,
+          "seed": 1,
+          "spell_f1": 0.58024,
+          "macro_f1": 0.853993,
+          "n_poss": 291,
+          "mean_poss_s": 14.116838,
+          "gt_n_poss": 377,
+          "gt_mean_poss_s": 10.867268
+        }
+      ],
+      "train_cpu_s": {
+        "emit": 295.2,
+        "det": 98.6
+      },
+      "est_run_s": 470,
+      "secondary": {
+        "mean": {
+          "spell_f1": 0.4902,
+          "macro_f1": 0.8769,
+          "n_poss": 273.6667,
+          "mean_poss_s": 11.2526,
+          "gt_n_poss": 471.0,
+          "gt_mean_poss_s": 6.4371
+        },
+        "cases": [
+          {
+            "game": "J03WMX",
+            "seed": 0,
+            "spell_f1": 0.456274,
+            "macro_f1": 0.887125,
+            "n_poss": 278,
+            "mean_poss_s": 12.403309,
+            "gt_n_poss": 511,
+            "gt_mean_poss_s": 6.682505
+          },
+          {
+            "game": "J03WN1",
+            "seed": 0,
+            "spell_f1": 0.492308,
+            "macro_f1": 0.858923,
+            "n_poss": 293,
+            "mean_poss_s": 9.500341,
+            "gt_n_poss": 500,
+            "gt_mean_poss_s": 5.47016
+          },
+          {
+            "game": "J03WOH",
+            "seed": 0,
+            "spell_f1": 0.522086,
+            "macro_f1": 0.884746,
+            "n_poss": 250,
+            "mean_poss_s": 11.85424,
+            "gt_n_poss": 402,
+            "gt_mean_poss_s": 7.158706
+          }
+        ]
+      },
+      "secondary_check": {
+        "d_spell": 0.162679,
+        "n_better": 3,
+        "n_games": 3,
+        "passed": true
+      },
+      "gate": {
+        "d_spell": 0.001147,
+        "n_better": 3,
+        "n_cases": 6,
+        "d_macro": 0.006197,
+        "passed": false
+      }
+    },
+    "b_dfl_w05": {
+      "config": {
+        "features": true,
+        "detector": true,
+        "k_s": 0.5,
+        "through_dead_s": null,
+        "train_seeds": [
+          100,
+          101,
+          102
+        ],
+        "dfl_games": [
+          "J03WMX",
+          "J03WN1",
+          "J03WOH",
+          "J03WOY",
+          "J03WPY",
+          "J03WQQ",
+          "J03WR9"
+        ],
+        "dfl_seeds": [
+          100
+        ],
+        "dfl_weight": 0.5,
+        "decode": {
+          "switch_ha": 10.0,
+          "alive_to_dead": 20.0,
+          "dead_to_alive": 40.0,
+          "alpha": 8.0,
+          "floor": 0.5
+        }
+      },
+      "n_points": 192,
+      "mean": {
+        "spell_f1": 0.602,
+        "macro_f1": 0.8556,
+        "n_poss": 261.1667,
+        "mean_poss_s": 13.9928,
+        "gt_n_poss": 349.3333,
+        "gt_mean_poss_s": 10.7516
+      },
+      "cases": [
+        {
+          "game": 1,
+          "seed": 0,
+          "spell_f1": 0.578502,
+          "macro_f1": 0.849677,
+          "n_poss": 261,
+          "mean_poss_s": 12.996935,
+          "gt_n_poss": 353,
+          "gt_mean_poss_s": 9.844873
+        },
+        {
+          "game": 2,
+          "seed": 0,
+          "spell_f1": 0.659823,
+          "macro_f1": 0.853311,
+          "n_poss": 247,
+          "mean_poss_s": 13.936842,
+          "gt_n_poss": 318,
+          "gt_mean_poss_s": 11.542767
+        },
+        {
+          "game": 3,
+          "seed": 0,
+          "spell_f1": 0.56112,
+          "macro_f1": 0.854584,
+          "n_poss": 266,
+          "mean_poss_s": 15.510677,
+          "gt_n_poss": 377,
+          "gt_mean_poss_s": 10.867268
+        },
+        {
+          "game": 1,
+          "seed": 1,
+          "spell_f1": 0.619709,
+          "macro_f1": 0.874233,
+          "n_poss": 266,
+          "mean_poss_s": 12.833083,
+          "gt_n_poss": 353,
+          "gt_mean_poss_s": 9.844873
+        },
+        {
+          "game": 2,
+          "seed": 1,
+          "spell_f1": 0.627857,
+          "macro_f1": 0.849738,
+          "n_poss": 242,
+          "mean_poss_s": 14.374711,
+          "gt_n_poss": 318,
+          "gt_mean_poss_s": 11.542767
+        },
+        {
+          "game": 3,
+          "seed": 1,
+          "spell_f1": 0.564955,
+          "macro_f1": 0.851891,
+          "n_poss": 285,
+          "mean_poss_s": 14.304281,
+          "gt_n_poss": 377,
+          "gt_mean_poss_s": 10.867268
+        }
+      ],
+      "train_cpu_s": {
+        "emit": 296.9,
+        "det": 102.9
+      },
+      "est_run_s": 475,
+      "secondary": {
+        "mean": {
+          "spell_f1": 0.4824,
+          "macro_f1": 0.8745,
+          "n_poss": 266.3333,
+          "mean_poss_s": 11.6531,
+          "gt_n_poss": 471.0,
+          "gt_mean_poss_s": 6.4371
+        },
+        "cases": [
+          {
+            "game": "J03WMX",
+            "seed": 0,
+            "spell_f1": 0.443188,
+            "macro_f1": 0.887659,
+            "n_poss": 267,
+            "mean_poss_s": 12.892135,
+            "gt_n_poss": 511,
+            "gt_mean_poss_s": 6.682505
+          },
+          {
+            "game": "J03WN1",
+            "seed": 0,
+            "spell_f1": 0.483312,
+            "macro_f1": 0.850154,
+            "n_poss": 297,
+            "mean_poss_s": 9.411717,
+            "gt_n_poss": 500,
+            "gt_mean_poss_s": 5.47016
+          },
+          {
+            "game": "J03WOH",
+            "seed": 0,
+            "spell_f1": 0.520565,
+            "macro_f1": 0.885797,
+            "n_poss": 235,
+            "mean_poss_s": 12.655319,
+            "gt_n_poss": 402,
+            "gt_mean_poss_s": 7.158706
+          }
+        ]
+      },
+      "secondary_check": {
+        "d_spell": 0.154811,
+        "n_better": 3,
+        "n_games": 3,
+        "passed": true
+      },
+      "gate": {
+        "d_spell": 0.004387,
+        "n_better": 4,
+        "n_cases": 6,
+        "d_macro": 0.007574,
+        "passed": false
+      }
+    }
+  },
+  "skipped": {
+    "c_dfl_seeds3": "dropped for time (--skip)"
+  },
+  "stopped_early_after": "b_dfl_w05",
+  "best_variant": "b_dfl_w05",
+  "gate": {
+    "d_spell": 0.004387,
+    "n_better": 4,
+    "n_cases": 6,
+    "d_macro": 0.007574,
+    "passed": false
+  },
+  "secondary_check": {
+    "d_spell": 0.154811,
+    "n_better": 3,
+    "n_games": 3,
+    "passed": true
+  },
+  "winner_variant": null,
+  "winner": null,
+  "runtime_s": 1909
+}

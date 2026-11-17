@@ -261,6 +261,109 @@ Observations:
   across 5 variants, so its margin is biased upward. That makes the failed gate more, not
   less, robust.
 
+## Stage 2 (2026-11-17): public DFL Bundesliga games in the training pool -- FAILED the gate (incumbent stays)
+
+`python -m bsd.experiments stage2 --skip c_dfl_seeds3 --secondary-n 3` (record:
+`bsd/experiments_stage2.json`; per-case CSVs `cache/stage2_<variant>.csv`, full grids
+`cache/stage2_<variant>_grid.csv`, secondary scores `cache/stage2_<variant>_secondary.csv`, log
+`cache/stage2_log.txt`). 31 min 49 s (1909 s) wall time on 4 worker processes.
+
+Data: the 7 DFL/IDSSE open-data matches (Bassek et al., CC BY 4.0; `bsd.fetch_dfl`,
+`bsd.io_dfl`), 2 periods each, 25 fps, ~137k-147k frames, one slot per player. Each DFL game is
+degraded with `bsd.degrade` exactly like a Metrica game (the BAR-ATH-like ball mask provides all
+ball missingness, since the DFL ball is present on every frame), featurised with
+`frame_features(handover=True)` and labelled from the provider's per-frame flags.
+
+**Label-convention caveat.** DFL labels are the data provider's per-frame BallStatus /
+BallPossession flags, not event-derived. They carry more dead time (D share 41-52 % of frames vs
+30-40 % on Metrica) and shorter possession spells (mean 5.5-9.2 s vs ~10 s on Metrica; ~500 GT
+spells per DFL game) than the Metrica labels built from events (`bsd.events`, R5-R7). The
+BAR-ATH GT is built from corrected tracking, so it may be closer to the DFL flags than to the
+Metrica labels, but that cannot be checked here; the primary (gate) bench scores against the
+Metrica convention only, so a model that learns the DFL convention is penalised there.
+
+Protocol:
+- Incumbent: the committed Stage 1 model (hand-over emitter features, detector k_s 0.5),
+  re-tuned on the Stage 1 grid like every variant.
+- Primary (gate): the usual 6 Metrica cases (held-out game 1-3 x seed 0, 1). A candidate's fold
+  trains the emitter and the detector on the 2 other Metrica games x seeds 100-102 plus every
+  DFL game (change labels from the DFL labels with the same k_s 0.5), mirrored and
+  visibility-weighted as before.
+- Secondary: a DFL game held out at degrade seed 0. Incumbent = trained on the 3 Metrica games x
+  seeds 100-102 (the `bsd.run` training set); candidate = the same plus the other 6 DFL games.
+  Decoded at the parameters each model tuned on the primary (no tuning on DFL). The candidate's
+  mean spellF1 must not be more than 0.010 below the incumbent's; this is required on top of the
+  gate.
+- Variants: (a) `a_dfl` all 7 DFL games, 1 training degrade seed (100) each; (b) `b_dfl_w05` as
+  (a) with DFL rows weighted 0.5 (`weights` of `train_emitter` / `train_detector`, multiplied on
+  top of the visibility weights; default None = unchanged model); (c) `c_dfl_seeds3` DFL with
+  seeds 100-102 -- not run: dropped for time, and the early-stop rule would also have dropped it ((b) added +0.0032 < +0.005 over (a)).
+- Time budget: (c) was dropped and the secondary shrunk to the first 3 DFL games (sorted match
+  ids J03WMX, J03WN1, J03WOH) to finish inside the task's time box; the full protocol (all 7) is the
+  driver's default (`--secondary-n` unset).
+- Training rows are pre-strided (every 3rd frame) in the parent and fitted with stride 1: the
+  same rows as the default fits, less data shipped to the workers.
+- `bsd.run` estimate: today's run (254 s) plus today's final-model training times scaled by the
+  cost ratio of the final model (3 Metrica games x 3 seeds + the DFL rows; derived from the
+  per-fold training CPU seconds) plus the DFL featurisation the final run would add.
+
+Results (primary = the 6 Metrica cases; secondary = 3 held-out DFL games at seed 0; train CPU is per fold of the
+primary, the incumbent's measured by the shared `Evidence` path):
+
+| variant | primary spellF1 | macroF1 | n poss | mean poss s | secondary spellF1 (macroF1) | tuned: switch_ha, D pair, alpha, floor | train CPU per fold (emitter + detector) | est. run |
+|---|---|---|---|---|---|---|---|---|
+| incumbent | 0.5976 | 0.8480 | 259.0 | 14.55 | 0.3275 (0.6331) | 10, (40, 80), 16, 0.5 | 128 + 42 s | 254 s (today) |
+| a_dfl | 0.5988 | 0.8542 | 263.7 | 13.87 | 0.4902 (0.8769) | 5, (20, 40), 8, 1 | 295 + 99 s | 470 s |
+| b_dfl_w05 | 0.6020 | 0.8556 | 261.2 | 13.99 | 0.4824 (0.8745) | 10, (20, 40), 8, 0.5 | 297 + 103 s | 475 s |
+
+Primary per case, spellF1 (macroF1):
+
+| game | seed | incumbent | a_dfl | b_dfl_w05 |
+|---|---|---|---|---|
+| 1 | 0 | 0.5626 (0.8425) | 0.5587 (0.8462) | 0.5785 (0.8497) |
+| 2 | 0 | 0.6489 (0.8477) | 0.6483 (0.8516) | 0.6598 (0.8533) |
+| 3 | 0 | 0.5589 (0.8542) | 0.5688 (0.8526) | 0.5611 (0.8546) |
+| 1 | 1 | 0.6151 (0.8458) | 0.6036 (0.8698) | 0.6197 (0.8742) |
+| 2 | 1 | 0.6311 (0.8435) | 0.6329 (0.8511) | 0.6279 (0.8497) |
+| 3 | 1 | 0.5691 (0.8544) | 0.5802 (0.8540) | 0.5650 (0.8519) |
+
+Secondary per held-out DFL game (seed 0), spellF1 (macroF1), n poss / GT n poss:
+
+| DFL game | incumbent | a_dfl | b_dfl_w05 |
+|---|---|---|---|
+| J03WMX | 0.3278 (0.6617), 276 / 511 | 0.4563 (0.8871), 278 / 511 | 0.4432 (0.8877), 267 / 511 |
+| J03WN1 | 0.3162 (0.6166), 288 / 500 | 0.4923 (0.8589), 293 / 500 | 0.4833 (0.8502), 297 / 500 |
+| J03WOH | 0.3386 (0.6210), 223 / 402 | 0.5221 (0.8847), 250 / 402 | 0.5206 (0.8858), 235 / 402 |
+
+The incumbent re-bench reproduces the committed record exactly (0.5976 / 0.8480 at 10, (40, 80), 16, 0.5).
+(b) added +0.0032 over (a), less than +0.005, so it is recorded as an early stop (`stopped_early_after`).
+
+**Gate (best variant b_dfl_w05 vs incumbent, same 6 cases): FAILED.** Mean spellF1 +0.0044 (needs >= 0.010).
+Better on 4 of 6 cases (needs >= 4). Mean macroF1 +0.0076 (a drop of at most 0.010 is allowed). Only the spellF1
+margin fails. (a) a_dfl: +0.0011, 3 of 6 better, macroF1 +0.0062, which also fails.
+**Secondary: OK for both** (b +0.1548, a +0.1627 mean spellF1 over the incumbent on the 3 held-out DFL games, all
+3 games better). Adoption needs both, so `winner` is null. The Stage 1 model stays in `bsd.run` and
+`bsd/decode_params.json`, and nothing there was changed.
+
+Observations:
+- Adding the DFL games helps macroF1 on the Metrica cases (+0.006 to +0.008, mostly at seed 1), but spellF1 barely
+  moves (+0.001 / +0.004). That is far inside the ~0.04 noise band and the selection bias of a 192-point in-sample
+  decoder search. Both variants re-tuned to the smaller D pair (20, 40) and alpha 8.
+- Down-weighting DFL to 0.5 (b) is slightly better on the primary and slightly worse on the secondary than weight
+  1.0 (a). That fits a label-convention mismatch: the more the model learns the DFL flags, the less it fits the
+  Metrica event-derived labels it is graded against, and vice versa.
+- The secondary gain is large (+0.15 spellF1, +0.25 macroF1) and expected. The incumbent never saw the DFL
+  convention (more dead time, ~500 short spells per game): it predicts ~220-290 possessions against 400-511 GT
+  spells, and its macroF1 there is only 0.62-0.66. The candidates' possession counts stay about the same (235-297,
+  decoded with Metrica-tuned costs), so the gain is mostly in the per-frame H/A/D split (dead-ball calls), not in
+  segmentation. It shows the models learn the DFL labels; it says little about BAR-ATH.
+- Cost: the DFL rows more than double the per-fold training time (emitter 128 -> ~296 s, detector 42 -> ~100 s).
+  The estimated `bsd.run` is ~8 min (470-475 s, including the DFL featurisation of the 7 games), well under the
+  20 min limit. It would also need the DFL fetch (2.5 GB of XML in `data/dfl/`) in the reproduction.
+- Caveats: decoder costs are tuned in sample on the 6 reported cases. The secondary uses 3 of the 7 DFL games (time
+  box) and the incumbent's secondary model is the `bsd.run` training set. Labels on the two sides follow different
+  conventions (see the caveat above), so the primary and secondary numbers are not comparable with each other.
+
 ## Before R13 (record)
 
 Same protocol, except that `bsd.degrade.fill_ball` linearly interpolated the sample ball across
