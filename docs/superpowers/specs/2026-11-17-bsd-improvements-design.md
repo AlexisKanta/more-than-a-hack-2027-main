@@ -191,6 +191,31 @@ Same gate as the other stages. Training time must stay within the stage-2 limits
 5. Final whole-branch review. Then hand back to the user with the finishing menu. Merging, and
    which branch to publish, is the user's decision.
 
+## Decisions settled after the builder check (design author's calls)
+
+- **Time-box.** The stages run in the user's order. When the cutoff the user gives is near, stop
+  the stage in progress at its last committed point. If it is not adopted by then, discard it. The
+  last adopted state is the submission. Leave at least **1 hour** before the cutoff for the final
+  checks and the upload. Benches may run in the background while the next variant is being coded.
+- **Stage 2 labels.** Prefer a source's per-frame **ball-status and ball-possession flags** in its
+  tracking data, if it has them (DFL does). The BAR-ATH GT is built from corrected tracking, which
+  is closer to these flags than to event logs. Where possible, cross-check the flags against the
+  source's events and report how well they agree. A source with possession or ball-status data but
+  no events (for example SkillCorner) qualifies under the same test.
+- **Stage 2 secondary bench.** Hold out each new game once, at seed 0. Compare:
+  - **incumbent:** trained on the 3 Metrica games only;
+  - **candidate:** trained on the 3 Metrica games plus the other new games.
+
+  The Metrica games are not part of the secondary bench (they are the primary). The candidate's
+  mean spellF1 there must not be more than 0.010 below the incumbent's.
+- **Stage 3 with only 3 games** (if Stage 2 is rejected). Still run it, using inner leave-one-out:
+  the first stage is trained on 1 game to produce out-of-fold inputs for the stacker. Note the
+  train/test mismatch in the bench notes. The gate decides.
+- **Reproduction commands.** Downloads stay separate fetch commands, as `bsd.fetch_sample` is
+  today. `REPRODUCE.md` lists the fetch commands, then `python -m bsd.run`. The runtime budgets
+  exclude download time. The clean check fetches into the archive copy, or symlinks the already
+  verified `data/` folders (their SHA-256 checksums are checked by the fetch script).
+
 ## Left to the builder
 
 Exact feature formulas, model hyperparameters inside each variant, variant order within a stage,
