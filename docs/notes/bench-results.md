@@ -98,6 +98,69 @@ read by `bsd.run`; copy in `cache/decode_params.json`), so `python -m bsd.run` d
 15.35 s, D share 35.7 % / 32.5 % per half. SHA-256
 `ae565dd42f3a591e998aace0c4e7c44ff542c78b8563870cfcf6a92564e0dd1b`.
 
+## Stage 1 (2026-11-17): hand-over detector -- PASSED the gate
+
+`python -m bsd.experiments stage1` (record: `bsd/experiments_stage1.json`; per-case CSVs
+`cache/stage1_<variant>.csv`, full grids `cache/stage1_<variant>_grid.csv`). 7 min 52 s wall
+time on 6 worker processes (a single run: 207 s training all folds of the incumbent emitter,
+the hand-over emitter and the k_s 0.5 detector in parallel, then ~1-2 min per detector variant
+for decoding and the k_s 1.0 detector). No variant came near the 12-min limit, so the grid was
+not narrowed.
+
+Protocol: the same 6 cases and folds as above (held-out game 1-3 x seed 0, 1; each fold trained
+on the other two games x seeds 100-102, mirrored, visibility-weighted). The detector is
+`bsd.handover.train_detector` on `frame_features(handover=True)` with change labels from
+`bsd.handover.change_labels` on the same training pool and visible rate. With a detector the
+H<->A cost of frame t is `max(floor, switch_ha - alpha * logit(p_change(t)))`. Decoder grid:
+`switch_ha` {10, 20, 40} x (`alive_to_dead`, `dead_to_alive`) {(10, 20), (20, 40), (40, 80)} x
+`alpha` {0, 1, 2, 4, 8} x `floor` {1, 5}. alpha = 0 is decoded once, whatever the floor.
+Without a detector only alpha = 0 is searched. An axis whose best value is on its edge is
+extended once, like `bench.tune_decode`, by doubling or halving (floor only when the best alpha
+is > 0). Objective and tie-breaks as above.
+
+| variant | emitter features | detector | spellF1 | macroF1 | n poss | mean poss s | tuned: switch_ha, D pair, alpha, floor | points |
+|---|---|---|---|---|---|---|---|---|
+| incumbent | default | -- | 0.5440 | 0.8372 | 256.8 | 14.69 | 20, (20, 40), 0, -- | 9 |
+| (a) a_features | + hand-over | -- | 0.5644 | 0.8421 | 262.8 | 14.32 | 20, (20, 40), 0, -- | 9 |
+| (b) b_detector | default | k_s 0.5 | 0.5737 | 0.8442 | 233.7 | 16.15 | 20, (40, 80), 16, 0.5 | 256 |
+| **(c) c_both** | + hand-over | k_s 0.5 | **0.5976** | **0.8480** | 259.0 | 14.55 | 10, (40, 80), 16, 0.5 | 192 |
+| (d) d_k1 | + hand-over | k_s 1.0 | 0.5903 | 0.8455 | 273.0 | 13.76 | 5, (20, 40), 16, 5 | 192 |
+| (e) e_through_dead | -- | -- | not run | | | | | |
+
+The incumbent re-bench reproduces the committed record exactly (0.5440 / 0.8372 at
+(20, 20, 40)). (d) is (c) with k_s 1.0. It scored 0.0073 below (c), which is less than +0.005,
+so the stage stopped early and (e) (through_dead_s 2.0) was not run. Edge extensions (first-pass
+edges): (b) switch_ha 5, D pair (80, 160), alpha 16, floor 0.5; (c) switch_ha 5, alpha 16,
+floor 0.5; (d) switch_ha 5, alpha 16, floor 10. (c)'s D pair (40, 80) was interior in its first
+pass and became best only over the extended grid. The best alpha is the extended edge 16 in all
+three detector variants (and (d)'s switch_ha is the extended edge 5), but the curve is flat
+there. Best spellF1 by alpha for (c): 0: 0.5644, 1: 0.5719, 2: 0.5824,
+4: 0.5942, 8: 0.5971, 16: 0.5976. For (b): 0: 0.5440, 4: 0.5686, 8: 0.5729, 16: 0.5737.
+
+Per case, incumbent -> (c) spellF1 (macroF1):
+
+| game | seed | incumbent | c_both |
+|---|---|---|---|
+| 1 | 0 | 0.5246 (0.8352) | 0.5626 (0.8425) |
+| 2 | 0 | 0.5800 (0.8349) | 0.6489 (0.8477) |
+| 3 | 0 | 0.5309 (0.8446) | 0.5589 (0.8542) |
+| 1 | 1 | 0.5498 (0.8383) | 0.6151 (0.8458) |
+| 2 | 1 | 0.5587 (0.8285) | 0.6311 (0.8435) |
+| 3 | 1 | 0.5201 (0.8418) | 0.5691 (0.8544) |
+
+**Gate (best variant c_both vs incumbent, same 6 cases): PASSED.** Mean spellF1 +0.0536
+(>= 0.010), better on 6 of 6 cases (>= 4), mean macroF1 +0.0108 (drop <= 0.010). Winner config
+(`bsd/experiments_stage1.json` `winner`): hand-over emitter features, detector k_s 0.5,
+through_dead_s none, alpha 16, floor 0.5, switch_ha 10, alive_to_dead 40, dead_to_alive 80.
+Adoption in `bsd.run` is the next task. `bsd.run` and `bsd/decode_params.json` are unchanged
+here.
+
+Caveats: the decoder costs are tuned in sample on the 6 reported cases, as above. The detector
+variants searched 192-256 points and the incumbent 9, so their selection bias is larger. Even
+inside the original grid (alpha <= 8), (c) reaches 0.5971, and the margin (+0.054) is far above
+this bias and the ~0.04 noise band. The hand-over features alone, (a), already give +0.020 with
+the same 9-point search as the incumbent.
+
 ## Before R13 (record)
 
 Same protocol, except that `bsd.degrade.fill_ball` linearly interpolated the sample ball across

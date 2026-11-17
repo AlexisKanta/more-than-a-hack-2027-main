@@ -80,6 +80,8 @@ def viterbi(logp, p, switch_cost=None):
 
 def decode_periods(logp, p, periods, n_frames, switch_cost=None):
     """Decode each (period, first, last) inclusive range independently; X elsewhere."""
+    if switch_cost is not None and len(switch_cost) != n_frames:
+        raise ValueError("switch_cost must have length n_frames")
     out = np.full(n_frames, X, dtype=np.int8)
     for _, first, last in periods:
         sc = None if switch_cost is None else np.asarray(switch_cost)[first:last + 1]

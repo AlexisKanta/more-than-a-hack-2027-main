@@ -64,12 +64,16 @@ def score(gt_codes, pred_codes):
     }
 
 
-def _degraded(game, profile, seed):
-    """(X, labels, names, periods, n_frames) of a sample game after BAR-ATH-like degradation."""
+def _degraded(game, profile, seed, handover=False, with_fps=False):
+    """(X, labels, names, periods, n_frames) of a sample game after BAR-ATH-like degradation.
+
+    ``handover=True`` adds the hand-over feature columns; ``with_fps=True`` appends the fps.
+    """
     tr, labels = sample_game(game)
     d = degrade(tr, profile, seed)
-    X, names = frame_features(d)
-    return X, labels, names, d.periods, len(d.ball)
+    X, names = frame_features(d, handover=True) if handover else frame_features(d)
+    out = (X, labels, names, d.periods, len(d.ball))
+    return out + (int(d.fps),) if with_fps else out
 
 
 def bench(make_emit, params, seeds=(0, 1)):
@@ -91,13 +95,25 @@ def bench(make_emit, params, seeds=(0, 1)):
     return pd.DataFrame(rows)
 
 
-def prepare(seeds=SEEDS, train_seeds=TRAIN_SEEDS):
+def prepare(seeds=SEEDS, train_seeds=TRAIN_SEEDS, handover=False, pool_meta=False):
     """Degraded sample games: ``held[(game, seed)]`` = (X, labels, names, periods, n) for scoring,
-    ``pool[(game, train_seed)]`` = (X, labels, names) for training."""
+    ``pool[(game, train_seed)]`` = (X, labels, names) for training.
+
+    ``handover=True`` adds the hand-over feature columns; ``pool_meta=True`` keeps the pool
+    entries whole: (X, labels, names, periods, n, fps).
+    """
     profile = gap_profile()
-    held = {(g, s): _degraded(g, profile, s) for s in seeds for g in GAMES}
-    pool = {(g, s): _degraded(g, profile, s)[:3] for g in GAMES for s in train_seeds}
+    held = {(g, s): _degraded(g, profile, s, handover) for s in seeds for g in GAMES}
+    pool = {(g, s): _degraded(g, profile, s, handover, pool_meta) for g in GAMES for s in train_seeds}
+    if not pool_meta:
+        pool = {k: v[:3] for k, v in pool.items()}
     return held, pool
+
+
+def fold_train(pool, game):
+    """The training entries of held-out ``game``'s fold: every pool entry of the other games."""
+    train_seeds = sorted({s for _, s in pool})
+    return [pool[(o, s)] for o in GAMES if o != game for s in train_seeds]
 
 
 def training_data(games=GAMES, seeds=TRAIN_SEEDS):
@@ -113,8 +129,7 @@ def heldout_logp(make_emit, held, pool):
     the emitter it returns scores that game under every held-out seed.
     """
     seeds = sorted({s for _, s in held})
-    train_seeds = sorted({s for _, s in pool})
-    emits = {g: make_emit([pool[(o, s)] for o in GAMES if o != g for s in train_seeds]) for g in GAMES}
+    emits = {g: make_emit(fold_train(pool, g)) for g in GAMES}
     cases = []
     for s in seeds:
         for g in GAMES:

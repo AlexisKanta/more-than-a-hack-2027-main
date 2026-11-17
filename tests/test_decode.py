@@ -102,3 +102,9 @@ def test_switch_cost_bad_input():
         viterbi(np.zeros((5, 3)), p, np.full(4, 20.0))
     with pytest.raises(ValueError):
         viterbi(np.zeros((5, 3)), p, np.array([20, 20, np.nan, 20, 20.0]))
+
+
+def test_decode_periods_switch_cost_length_checked():
+    logp = np.zeros((20, 3))
+    with pytest.raises(ValueError, match="switch_cost"):
+        decode_periods(logp, P, [(1, 0, 9)], 20, switch_cost=np.ones(15))
